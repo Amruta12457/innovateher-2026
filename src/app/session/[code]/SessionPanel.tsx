@@ -47,6 +47,7 @@ export default function SessionPanel({
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const listeningRef = useRef(false);
 
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
@@ -146,23 +147,44 @@ export default function SessionPanel({
       setMicDenied(false);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      listeningRef.current = true;
 
-      const recorder = new MediaRecorder(stream);
-      recorderRef.current = recorder;
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : '';
 
-      recorder.ondataavailable = async (e) => {
-        if (e.data.size > 0) {
-          await transcribeChunk(e.data);
-        }
+      const startNextSegment = () => {
+        if (!listeningRef.current || !streamRef.current) return;
+        const recorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : undefined);
+        recorderRef.current = recorder;
+
+        recorder.ondataavailable = async (e) => {
+          if (e.data.size > 0) {
+            await transcribeChunk(e.data);
+          }
+        };
+
+        recorder.onstop = () => {
+          recorderRef.current = null;
+          if (listeningRef.current && streamRef.current) {
+            setTimeout(startNextSegment, 0);
+          } else {
+            streamRef.current?.getTracks().forEach((t) => t.stop());
+            streamRef.current = null;
+          }
+        };
+
+        recorder.start();
+        setTimeout(() => {
+          if (recorder.state === 'recording') {
+            recorder.stop();
+          }
+        }, CHUNK_MS);
       };
 
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        recorderRef.current = null;
-      };
-
-      recorder.start(CHUNK_MS);
+      startNextSegment();
       setListening(true);
     } catch (e) {
       setMicDenied(true);
@@ -171,10 +193,13 @@ export default function SessionPanel({
   }, [transcribeChunk]);
 
   const stopListening = useCallback(() => {
+    listeningRef.current = false;
     const recorder = recorderRef.current;
     if (recorder && recorder.state === 'recording') {
-      recorder.requestData();
       recorder.stop();
+    } else if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
     setListening(false);
   }, []);

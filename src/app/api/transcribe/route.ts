@@ -84,6 +84,9 @@ export async function POST(request: Request) {
       audioBuffer = await request.arrayBuffer();
     }
 
+    if (provider === 'deepgram' && hasKey && (!audioBuffer || audioBuffer.byteLength === 0)) {
+      console.warn('[transcribe] Empty or missing audio blob, byteLength:', audioBuffer?.byteLength ?? 0);
+    }
     if (provider === 'deepgram' && hasKey && audioBuffer && audioBuffer.byteLength > 0) {
       const result = await transcribeWithDeepgram(audioBuffer, contentType);
       if (result.ok) {
