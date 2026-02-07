@@ -60,12 +60,20 @@ See `supabase/schema.sql` for the full DDL.
 
 ## Current Scope
 
-This chunk includes:
-
 - Landing page (Create / Join session)
-- Session page stub with code, status, role, and display name
+- Session page with live events feed: Voices to Revisit, Idea Board, Transcript Feed
+- Supabase Realtime for events (when configured) or localStorage polling (mock)
+- Host-only test buttons: Add transcript chunk, Add nudge, Clear local view
 - Session code generator (e.g. `SUNFLOWER-42`)
-- Supabase client helper (no-ops when env vars missing)
-- Local mock mode using in-memory storage
 
-Not yet implemented: realtime, mic, Gemini, dashboard.
+Not yet implemented: mic, STT, Gemini, dashboard.
+
+## Testing Realtime (Two Tabs)
+
+1. **Create a session** as host: go to `/`, click Create Session.
+2. **Copy the session link** (Copy link button) or note the session code.
+3. **Open a second tab**: paste the link or join with the code as a viewer.
+4. **In the host tab**: click "Add test transcript chunk" or "Add test nudge".
+5. **In the viewer tab**: new events should appear within ~1 second (mock) or instantly (Supabase Realtime).
+
+**Supabase Realtime setup**: Run `supabase/rls-policies.sql` in Supabase SQL Editor to enable events RLS and Realtime. Without it, Supabase will still store events, but the viewer tab may not see them in real time until you refresh.

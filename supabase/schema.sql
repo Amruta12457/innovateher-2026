@@ -37,3 +37,11 @@ CREATE INDEX IF NOT EXISTS idx_meetings_session_id ON meetings(session_id);
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow anon insert sessions" ON sessions FOR INSERT TO anon WITH CHECK (true);
 CREATE POLICY "Allow anon select sessions" ON sessions FOR SELECT TO anon USING (true);
+
+-- RLS for events (realtime feed)
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow anon insert events" ON events FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "Allow anon select events" ON events FOR SELECT TO anon USING (true);
+
+-- Enable Realtime for events table
+ALTER PUBLICATION supabase_realtime ADD TABLE events;
