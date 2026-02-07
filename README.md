@@ -32,8 +32,8 @@ The app works without these. If missing, it runs in **local mock mode** (in-memo
 | ---------------------------- | ---------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`   | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key  |
-| `STT_PROVIDER`               | `mock` (default), `deepgram`, `assemblyai`, `google` |
-| `STT_API_KEY`                | API key for real STT (optional; mock used if missing) |
+| `STT_PROVIDER`               | `mock` (default), `deepgram` (others can be added later) |
+| `STT_API_KEY`                | Deepgram API key (optional; mock used if missing) |
 
 Create `.env.local` in the project root (same folder as `package.json`):
 
@@ -68,7 +68,35 @@ See `supabase/schema.sql` for the full DDL.
 - Host-only: Start/Stop Listening (mic capture), Type a note fallback, test buttons
 - Session code generator (e.g. `SUNFLOWER-42`)
 
-Not yet implemented: real STT (Deepgram/AssemblyAI/Google), Gemini, dashboard.
+Not yet implemented: additional STT providers, Gemini, dashboard.
+
+## STT (Speech-to-Text) Setup
+
+### Using Mock (Default)
+
+No configuration needed. Transcription returns placeholder text for testing the pipeline.
+
+### Using Deepgram
+
+1. Get a [Deepgram API key](https://console.deepgram.com/signup) (free tier available).
+2. Add to `.env.local`:
+   ```
+   STT_PROVIDER=deepgram
+   STT_API_KEY=your-deepgram-api-key
+   ```
+3. Restart the dev server.
+
+**Audio format**: Chrome’s MediaRecorder produces `audio/webm` (Opus), which Deepgram supports. **Chrome recommended; webm supported.** For other browsers, see [Deepgram supported formats](https://developers.deepgram.com/docs/supported-audio-formats).
+
+### Verifying Transcription Works
+
+1. Create a session as host.
+2. Click **Start Listening** and allow mic access.
+3. Speak clearly for a few seconds.
+4. Wait ~10 seconds for the first chunk; real speech should appear in the Transcript Feed.
+5. If you see mock placeholder text instead, check:
+   - `STT_PROVIDER=deepgram` and `STT_API_KEY` are set in `.env.local`
+   - Server logs for `[transcribe] Deepgram error:` messages
 
 ## Mic Permissions
 

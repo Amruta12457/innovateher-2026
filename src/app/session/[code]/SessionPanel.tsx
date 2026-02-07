@@ -126,12 +126,14 @@ export default function SessionPanel({
         const data = await res.json();
         const text = data?.text ?? 'Transcript unavailable.';
         const sttProvider = data?.stt_provider ?? 'mock';
-        await insertEvent(session.id, 'transcript_chunk', {
+        const payload: Record<string, unknown> = {
           text,
           ts: new Date().toISOString(),
           source: 'mic',
           stt_provider: sttProvider,
-        });
+        };
+        if (data?.stt_status) payload.stt_status = data.stt_status;
+        await insertEvent(session.id, 'transcript_chunk', payload);
       } catch (e) {
         setTranscribeWarning('Transcript failed. Try typing a note.');
       }
