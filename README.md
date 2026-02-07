@@ -32,6 +32,8 @@ The app works without these. If missing, it runs in **local mock mode** (in-memo
 | ---------------------------- | ---------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`   | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key  |
+| `STT_PROVIDER`               | `mock` (default), `deepgram`, `assemblyai`, `google` |
+| `STT_API_KEY`                | API key for real STT (optional; mock used if missing) |
 
 Create `.env.local` in the project root (same folder as `package.json`):
 
@@ -63,10 +65,19 @@ See `supabase/schema.sql` for the full DDL.
 - Landing page (Create / Join session)
 - Session page with live events feed: Voices to Revisit, Idea Board, Transcript Feed
 - Supabase Realtime for events (when configured) or localStorage polling (mock)
-- Host-only test buttons: Add transcript chunk, Add nudge, Clear local view
+- Host-only: Start/Stop Listening (mic capture), Type a note fallback, test buttons
 - Session code generator (e.g. `SUNFLOWER-42`)
 
-Not yet implemented: mic, STT, Gemini, dashboard.
+Not yet implemented: real STT (Deepgram/AssemblyAI/Google), Gemini, dashboard.
+
+## Mic Permissions
+
+When the host clicks **Start Listening**, the browser will request microphone access. If you deny or block it:
+
+- A friendly banner appears: *"Mic access denied. Use Type a note below to add transcript manually."*
+- Use the **Type a note** input box to add transcript chunks manually.
+
+To enable mic capture, allow the site in your browser (e.g. Chrome: click the lock/mic icon in the address bar → Site settings → Microphone → Allow). Use **https** or **localhost**; some browsers restrict `getUserMedia` on insecure origins.
 
 ## Testing Realtime (Two Tabs)
 

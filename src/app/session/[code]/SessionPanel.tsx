@@ -27,6 +27,8 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   });
 }
 
+const CHUNK_MS = 10_000; // 10 seconds
+
 export default function SessionPanel({
   session,
   role,
@@ -38,6 +40,13 @@ export default function SessionPanel({
 }) {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listening, setListening] = useState(false);
+  const [micDenied, setMicDenied] = useState(false);
+  const [transcribeWarning, setTranscribeWarning] = useState<string | null>(null);
+  const [manualNote, setManualNote] = useState('');
+
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
 
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
@@ -104,9 +113,94 @@ export default function SessionPanel({
     };
   }, [session.id, handleEvents]);
 
+  const transcribeChunk = useCallback(
+    async (blob: Blob) => {
+      try {
+        setTranscribeWarning(null);
+        const form = new FormData();
+        form.append('audio', blob);
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          body: form,
+        });
+        const data = await res.json();
+        const text = data?.text ?? 'Transcript unavailable.';
+        const sttProvider = data?.stt_provider ?? 'mock';
+        await insertEvent(session.id, 'transcript_chunk', {
+          text,
+          ts: new Date().toISOString(),
+          source: 'mic',
+          stt_provider: sttProvider,
+        });
+      } catch (e) {
+        setTranscribeWarning('Transcript failed. Try typing a note.');
+      }
+    },
+    [session.id]
+  );
+
+  const startListening = useCallback(async () => {
+    try {
+      setMicDenied(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size > 0) {
+          await transcribeChunk(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+      };
+
+      recorder.start(CHUNK_MS);
+      setListening(true);
+    } catch (e) {
+      setMicDenied(true);
+      setListening(false);
+    }
+  }, [transcribeChunk]);
+
+  const stopListening = useCallback(() => {
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state === 'recording') {
+      recorder.requestData();
+      recorder.stop();
+    }
+    setListening(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopListening();
+    };
+  }, [stopListening]);
+
   const copyLink = () => {
     const url = typeof window !== 'undefined' ? window.location.href : '';
     navigator.clipboard.writeText(url);
+  };
+
+  const addManualNote = async () => {
+    const text = manualNote.trim();
+    if (!text) return;
+    try {
+      await insertEvent(session.id, 'transcript_chunk', {
+        text,
+        ts: new Date().toISOString(),
+        source: 'manual',
+      });
+      setManualNote('');
+    } catch (e) {
+      console.error('Failed to add note:', e);
+    }
   };
 
   const addTestTranscript = async () => {
@@ -159,6 +253,22 @@ export default function SessionPanel({
           >
             Copy link
           </button>
+          {role === 'host' && (
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                listening
+                  ? 'bg-emerald-100 text-emerald-800 animate-pulse'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  listening ? 'bg-emerald-500' : 'bg-slate-400'
+                }`}
+              />
+              {listening ? 'Listening' : 'Not listening'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span
@@ -174,9 +284,38 @@ export default function SessionPanel({
         </div>
       </header>
 
-      {/* Host-only buttons */}
+      {/* Mic denied banner */}
+      {role === 'host' && micDenied && (
+        <div className="px-4 py-2 bg-amber-100 border-b border-amber-200 text-amber-900 text-sm">
+          Mic access denied. Use &ldquo;Type a note&rdquo; below to add transcript manually.
+        </div>
+      )}
+
+      {/* Transcribe warning */}
+      {role === 'host' && transcribeWarning && (
+        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
+          {transcribeWarning}
+        </div>
+      )}
+
+      {/* Host-only controls */}
       {role === 'host' && (
         <div className="p-4 flex flex-wrap gap-2 border-b border-amber-200/40">
+          {!listening ? (
+            <button
+              onClick={startListening}
+              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold border-2 border-emerald-900 shadow-md"
+            >
+              Start Listening
+            </button>
+          ) : (
+            <button
+              onClick={stopListening}
+              className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm font-semibold border-2 border-rose-900 shadow-md"
+            >
+              Stop Listening
+            </button>
+          )}
           <button
             onClick={addTestTranscript}
             className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium"
@@ -194,6 +333,26 @@ export default function SessionPanel({
             className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium"
           >
             Clear local view
+          </button>
+        </div>
+      )}
+
+      {/* Type a note (host fallback) */}
+      {role === 'host' && (
+        <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-amber-200/40 bg-white/60">
+          <input
+            type="text"
+            placeholder="Type a note..."
+            value={manualNote}
+            onChange={(e) => setManualNote(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addManualNote()}
+            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-amber-200 bg-white text-amber-900 placeholder-amber-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+          />
+          <button
+            onClick={addManualNote}
+            className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium"
+          >
+            Add note
           </button>
         </div>
       )}
