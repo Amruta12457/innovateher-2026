@@ -34,7 +34,7 @@ The app works without these. If missing, it runs in **local mock mode** (in-memo
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key  |
 | `STT_PROVIDER`               | `mock` (default), `deepgram` (others can be added later) |
 | `STT_API_KEY`                | Deepgram API key (optional; mock used if missing) |
-| `GEMINI_API_KEY`             | Optional. For AI nudges and Shine Reflection Report. Uses mock if missing. **Never expose to client.** |
+| `OPENAI_API_KEY`             | Optional. For AI nudges and Shine Reflection Report. Uses mock if missing. **Never expose to client.** |
 | `NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS` | Optional. Seconds between auto-nudges (default: 60). |
 
 Create `.env.local` in the project root (same folder as `package.json`):
@@ -70,7 +70,7 @@ See `supabase/schema.sql` for the full DDL.
 - Host-only: Start/Stop Listening (mic capture), Type a note fallback, test buttons
 - Session code generator (e.g. `SUNFLOWER-42`)
 - **Overlap-based interruption detection** (Web Audio API, client-side) — detects possible interruptions via audio energy
-- AI nudges (`POST /api/nudge`) and Shine Reflection Report (`POST /api/reflect`) via Gemini (mock when `GEMINI_API_KEY` not set)
+- AI nudges (`POST /api/nudge`) and Shine Reflection Report (`POST /api/reflect`) via OpenAI (mock when `OPENAI_API_KEY` not set)
 - Meetings storage and dashboard: list meetings and view full Shine Reflection Report (including Interruption Patterns)
 
 ## STT (Speech-to-Text) Setup

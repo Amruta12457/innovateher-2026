@@ -3,17 +3,18 @@
  * Input: { sessionId, transcriptSoFar?, transcriptChunks?, windowMinutes }
  * Uses last 2 segments of transcript for more context. transcriptChunks preferred when provided.
  * Output: { nudges: [{ title, owner?, interrupted_idea, rationale, suggested_phrase, confidence }] }
- * Uses Gemini when GEMINI_API_KEY set; otherwise returns mocked nudges.
+ * Uses OpenAI when OPENAI_API_KEY set; otherwise returns mocked nudges.
  */
 
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 
 export type NudgeItem = {
   type: 'idea_revisit';
   title: string;
   owner?: string;
   interrupted_idea?: string;
+  extracted_ideas?: string[];
   rationale: string;
   suggested_phrase: string;
   confidence: number;
@@ -28,6 +29,7 @@ function parseNudgesJson(text: string): NudgeItem[] {
     title: String(n.title ?? 'Voice to revisit'),
     owner: n.owner != null ? String(n.owner) : undefined,
     interrupted_idea: n.interrupted_idea != null ? String(n.interrupted_idea) : undefined,
+    extracted_ideas: Array.isArray(n.extracted_ideas) ? n.extracted_ideas.map(String) : undefined,
     rationale: String(n.rationale ?? ''),
     suggested_phrase: String(n.suggested_phrase ?? "Let's revisit that."),
     confidence: typeof n.confidence === 'number' ? n.confidence : 0.8,
@@ -37,11 +39,13 @@ function parseNudgesJson(text: string): NudgeItem[] {
 function getMockNudges(transcript: string): NudgeItem[] {
   const lines = transcript.split(/[.!?]\s+/).filter((s) => s.trim().length > 10);
   const phrase = lines[0]?.trim().slice(0, 50) || 'that idea';
+  const words = phrase.split(/\s+/).slice(0, 2);
   return [
     {
       type: 'idea_revisit',
       title: 'Possible interruption',
       interrupted_idea: phrase,
+      extracted_ideas: words.length > 0 ? [words.join(' ')] : [phrase],
       rationale: 'Idea may not have been fully explored.',
       suggested_phrase: "Let's revisit that thought.",
       confidence: 0.7,
@@ -50,6 +54,7 @@ function getMockNudges(transcript: string): NudgeItem[] {
 }
 
 export async function POST(request: Request) {
+  console.log('[nudge] POST /api/nudge hit');
   try {
     const body = await request.json();
     const {
@@ -92,9 +97,12 @@ export async function POST(request: Request) {
     })();
 
     const transcript = fallbackTranscript || [...chunks].join(' ');
-    const key = process.env.GEMINI_API_KEY;
+    const key = process.env.OPENAI_API_KEY;
+    // Debug: show if key is seen (never log the key itself)
+    console.log('[nudge] OPENAI_API_KEY present:', !!key, '| has .env keys:', Object.keys(process.env).filter((k) => k.includes('OPENAI') || k.includes('GEMINI')).join(', ') || 'none');
 
     if (!key) {
+      console.log('[nudge] No OPENAI_API_KEY - returning mock nudges. Check: .env.local in project root, var name exactly OPENAI_API_KEY, no spaces around =, restart dev server');
       return NextResponse.json({ nudges: getMockNudges(transcript) });
     }
 
@@ -129,23 +137,25 @@ ${segment1}
 SEGMENT 2 (recent):
 ${segment2}`;
 
-    const ai = new GoogleGenAI({ apiKey: key });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const openai = new OpenAI({ apiKey: key });
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = (response as { text?: string })?.text ?? '';
-    console.log('[nudge] Gemini raw response:', text);
+    const text = response.choices[0]?.message?.content ?? '';
+    console.log('[nudge] OpenAI raw response:', text);
     let nudges: NudgeItem[];
     try {
       nudges = parseNudgesJson(text);
     } catch {
-      const retry = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt + '\n\nIMPORTANT: Return valid JSON only. No markdown, no extra text.',
+      const retry = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'user', content: prompt + '\n\nIMPORTANT: Return valid JSON only. No markdown, no extra text.' },
+        ],
       });
-      const retryText = (retry as { text?: string })?.text ?? '';
+      const retryText = retry.choices[0]?.message?.content ?? '';
       nudges = parseNudgesJson(retryText);
     }
     console.log('[nudge] Parsed nudges:', JSON.stringify(nudges), '| length:', nudges.length, '| empty:', nudges.length === 0);
@@ -154,16 +164,58 @@ ${segment2}`;
       const topic = n.interrupted_idea?.trim();
       if (!topic) continue;
       try {
-        const descRes = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: `This topic was interrupted or not fully explored in a meeting: "${topic}"
+        const summaryRes = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: `You are a meeting equity assistant. A discussion was interrupted before an idea was fully explored.
 
-Write a short 1-2 sentence description for a meeting facilitator, so they can bring this topic back. Be specific and helpful. Output ONLY the description, no quotes or preamble.`,
+TRANSCRIPT CONTEXT:
+---
+Earlier: ${segment1.slice(-1500)}
+---
+Recent: ${segment2.slice(-1500)}
+---
+
+INITIAL DETECTION: "${topic}"
+Rationale: ${n.rationale ?? 'The idea was not fully explored.'}
+
+TASK:
+1. Identify the specific overlooked idea from the transcript context (the core thought that was cut short).
+2. Summarize it in 1-2 clear sentences for a meeting facilitator, so they can bring this topic back. Be specific and actionable.
+
+Output ONLY the summary. No preamble, no quotes, no labels.`,
+            },
+          ],
         });
-        const desc = ((descRes as { text?: string })?.text ?? '').trim();
-        if (desc) n.interrupted_idea = desc;
+        const summary = (summaryRes.choices[0]?.message?.content ?? '').trim();
+        console.log('[nudge] OpenAI summary response (Topic that was interrupted):', summary);
+        if (summary) n.interrupted_idea = summary;
       } catch {
         // keep original topic if description call fails
+      }
+      const descForExtract = n.interrupted_idea?.trim() || topic;
+      try {
+        const extractRes = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'user',
+              content: `From this description of an interrupted meeting topic: "${descForExtract}"
+
+Extract the main ideas as 1-2 word phrases (e.g. "Beaches", "Marketing budget", "Q3 timeline"). Return JSON only: {"ideas":["word1","word2"]}. Output ONLY valid JSON, no other text.`,
+            },
+          ],
+        });
+        const extractText = (extractRes.choices[0]?.message?.content ?? '').trim();
+        console.log('[nudge] OpenAI extraction response (Idea Board):', extractText);
+        const cleaned = extractText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(cleaned) as { ideas?: string[] };
+        const ideas = Array.isArray(parsed?.ideas) ? parsed.ideas.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : [];
+        if (ideas.length > 0) n.extracted_ideas = ideas;
+      } catch {
+        n.extracted_ideas = [topic.split(/\s+/).slice(0, 2).join(' ') || topic];
       }
     }
 

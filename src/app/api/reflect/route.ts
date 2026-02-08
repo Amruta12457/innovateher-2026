@@ -2,11 +2,11 @@
  * POST /api/reflect
  * Input: { sessionId, transcript, interruptionEvents? }
  * Output: Shine Reflection Report JSON.
- * Uses Gemini when GEMINI_API_KEY set; otherwise returns mocked reflection.
+ * Uses OpenAI when OPENAI_API_KEY set; otherwise returns mocked reflection.
  */
 
 import { NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 
 export type InterruptionEvent = {
   timestamp?: string;
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     };
     const transcriptStr = String(transcript ?? '');
     const events = Array.isArray(interruptionEvents) ? interruptionEvents : [];
-    const key = process.env.GEMINI_API_KEY;
+    const key = process.env.OPENAI_API_KEY;
 
     if (!key) {
       const mock = { ...MOCK_REFLECTION };
@@ -157,22 +157,24 @@ Return STRICT JSON only:
 Transcript:
 ${transcriptStr.slice(-8000)}${interruptStr}`;
 
-    const ai = new GoogleGenAI({ apiKey: key });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+    const openai = new OpenAI({ apiKey: key });
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = (response as { text?: string })?.text ?? '';
+    const text = response.choices[0]?.message?.content ?? '';
     let reflection: Reflection;
     try {
       reflection = parseReflectionJson(text);
     } catch {
-      const retry = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt + '\n\nIMPORTANT: Return valid JSON only. No markdown.',
+      const retry = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'user', content: prompt + '\n\nIMPORTANT: Return valid JSON only. No markdown.' },
+        ],
       });
-      reflection = parseReflectionJson((retry as { text?: string })?.text ?? '{}');
+      reflection = parseReflectionJson(retry.choices[0]?.message?.content ?? '{}');
     }
 
     return NextResponse.json(reflection);

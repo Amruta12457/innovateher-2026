@@ -17,6 +17,7 @@ type NudgePayload = {
   title?: string;
   owner?: string;
   interrupted_idea?: string;
+  extracted_ideas?: string[];
   rationale?: string;
   suggested_phrase?: string;
   confidence?: number;
@@ -35,7 +36,7 @@ const CHUNK_MS = 10_000;
 const NUDGE_INTERVAL_MS =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS
     ? parseInt(process.env.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS, 10) * 1000
-    : 10 * 60 * 1000) || 10 * 60 * 1000;
+    : 5 * 60 * 1000) || 5 * 60 * 1000;
 
 export default function SessionPanel({
   session,
@@ -62,6 +63,8 @@ export default function SessionPanel({
   const listeningRef = useRef(false);
   const overlapDetectorRef = useRef<{ stop: () => void } | null>(null);
   const transcriptRef = useRef('');
+  const transcriptChunksRef = useRef<EventRow[]>([]);
+  const nudgeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
@@ -72,15 +75,17 @@ export default function SessionPanel({
     .map((t) => (t.payload as { text?: string }).text ?? '')
     .join(' ');
   transcriptRef.current = fullTranscript;
+  transcriptChunksRef.current = transcriptChunks;
 
-  const ideaBoard = nudges.map((e) => {
+  const ideaBoard = nudges.flatMap((e) => {
     const p = e.payload as NudgePayload;
-    return {
-      id: e.id,
-      title: p.title ?? 'Untitled',
+    const ideas = p.extracted_ideas ?? (p.interrupted_idea ? [p.interrupted_idea] : [p.title ?? 'Untitled']);
+    return ideas.map((idea, i) => ({
+      id: `${e.id}-${i}`,
+      title: idea,
       owner: p.owner ?? '',
       status: p.confidence != null ? `${Math.round((p.confidence ?? 0) * 100)}%` : '',
-    };
+    }));
   });
 
   const handleEvents = useCallback((newEvents: EventRow[]) => {
@@ -304,6 +309,62 @@ export default function SessionPanel({
     }
   };
 
+  const generateNudgeFromLast10Min = useCallback(async () => {
+    if (nudgeLoading) return;
+    const chunks = transcriptChunksRef.current;
+    const tenMinAgo = Date.now() - NUDGE_INTERVAL_MS;
+    const recentChunks = chunks.filter(
+      (t) => new Date(t.created_at).getTime() >= tenMinAgo
+    );
+    const chunkTexts = recentChunks
+      .map((t) => (t.payload as { text?: string }).text ?? '')
+      .filter(Boolean);
+    if (chunkTexts.length === 0) return;
+    setNudgeLoading(true);
+    try {
+      const transcript = chunkTexts.join(' ');
+      const res = await fetch('/api/nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          transcriptSoFar: transcript,
+          transcriptChunks: chunkTexts,
+          windowMinutes: 10,
+        }),
+      });
+      const data = await res.json();
+      const nudgesList = data?.nudges ?? [];
+      if (nudgesList.length === 0) return;
+      for (const n of nudgesList) {
+        const payload = {
+          type: n.type ?? 'idea_revisit',
+          title: n.title,
+          owner: n.owner,
+          interrupted_idea: n.interrupted_idea,
+          extracted_ideas: n.extracted_ideas,
+          rationale: n.rationale,
+          suggested_phrase: n.suggested_phrase,
+          confidence: n.confidence,
+        };
+        const inserted = await insertEvent(session.id, 'nudge', payload);
+        setEvents((prev) => {
+          if (prev.some((e) => e.id === inserted.id)) return prev;
+          const next = [...prev, inserted].sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime()
+          );
+          return next.slice(-50);
+        });
+      }
+    } catch (e) {
+      console.error('Failed to generate nudge:', e);
+    } finally {
+      setNudgeLoading(false);
+    }
+  }, [session.id, nudgeLoading]);
+
   const generateNudge = useCallback(async () => {
     if (nudgeLoading) return;
     const chunks = transcriptChunks
@@ -320,21 +381,32 @@ export default function SessionPanel({
           sessionId: session.id,
           transcriptSoFar: latestOnly[0],
           transcriptChunks: latestOnly,
-          windowMinutes: 30,
+          windowMinutes: 10,
         }),
       });
       const data = await res.json();
       const nudgesList = data?.nudges ?? [];
       if (nudgesList.length === 0) return;
       for (const n of nudgesList) {
-        await insertEvent(session.id, 'nudge', {
+        const payload = {
           type: n.type ?? 'idea_revisit',
           title: n.title,
           owner: n.owner,
           interrupted_idea: n.interrupted_idea,
+          extracted_ideas: n.extracted_ideas,
           rationale: n.rationale,
           suggested_phrase: n.suggested_phrase,
           confidence: n.confidence,
+        };
+        const inserted = await insertEvent(session.id, 'nudge', payload);
+        setEvents((prev) => {
+          if (prev.some((e) => e.id === inserted.id)) return prev;
+          const next = [...prev, inserted].sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() -
+              new Date(b.created_at).getTime()
+          );
+          return next.slice(-50);
         });
       }
     } catch (e) {
@@ -384,9 +456,17 @@ export default function SessionPanel({
 
   useEffect(() => {
     if (!listening || role !== 'host') return;
-    const t = setInterval(generateNudge, NUDGE_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [listening, role, generateNudge]);
+    const first = setTimeout(() => {
+      void generateNudgeFromLast10Min();
+      const interval = setInterval(generateNudgeFromLast10Min, NUDGE_INTERVAL_MS);
+      nudgeIntervalRef.current = interval;
+    }, NUDGE_INTERVAL_MS);
+    return () => {
+      clearTimeout(first);
+      if (nudgeIntervalRef.current) clearInterval(nudgeIntervalRef.current);
+      nudgeIntervalRef.current = null;
+    };
+  }, [listening, role, generateNudgeFromLast10Min]);
 
   const clearLocalView = () => {
     setEvents([]);
@@ -539,21 +619,18 @@ export default function SessionPanel({
             Voices to Revisit
           </h2>
           <ul className="space-y-2">
-            {nudges.length === 0 && interruptions.length === 0 && (
+            {nudges.length === 0 && (
               <li className="text-amber-600/80 text-sm">No nudges yet</li>
             )}
-            {[...nudges, ...interruptions]
+            {nudges
               .sort(
                 (a, b) =>
                   new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
               )
               .map((e) => {
                 const topic =
-                  e.type === 'nudge'
-                    ? (e.payload as NudgePayload).interrupted_idea ??
-                      (e.payload as NudgePayload).rationale
-                    : (e.payload as { interrupted_idea?: string; rationale?: string }).interrupted_idea ??
-                      (e.payload as { rationale?: string }).rationale;
+                  (e.payload as NudgePayload).interrupted_idea ??
+                  (e.payload as NudgePayload).rationale;
                 return (
                   <li
                     key={e.id}
