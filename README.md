@@ -34,6 +34,8 @@ The app works without these. If missing, it runs in **local mock mode** (in-memo
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key  |
 | `STT_PROVIDER`               | `mock` (default), `deepgram` (others can be added later) |
 | `STT_API_KEY`                | Deepgram API key (optional; mock used if missing) |
+| `GEMINI_API_KEY`             | Optional. For AI nudges and Shine Reflection Report. Uses mock if missing. **Never expose to client.** |
+| `NUDGE_INTERVAL_SECONDS`     | Optional. Seconds between auto-nudges (default: 60 for demo, 600 for prod). |
 
 Create `.env.local` in the project root (same folder as `package.json`):
 
@@ -67,8 +69,8 @@ See `supabase/schema.sql` for the full DDL.
 - Supabase Realtime for events (when configured) or localStorage polling (mock)
 - Host-only: Start/Stop Listening (mic capture), Type a note fallback, test buttons
 - Session code generator (e.g. `SUNFLOWER-42`)
-
-Not yet implemented: additional STT providers, Gemini, dashboard.
+- AI nudges (`POST /api/nudge`) and Shine Reflection Report (`POST /api/reflect`) via Gemini (mock when `GEMINI_API_KEY` not set)
+- Meetings storage and dashboard: list meetings and view full Shine Reflection Report per meeting
 
 ## STT (Speech-to-Text) Setup
 
@@ -116,3 +118,14 @@ To enable mic capture, allow the site in your browser (e.g. Chrome: click the lo
 5. **In the viewer tab**: new events should appear within ~1 second (mock) or instantly (Supabase Realtime).
 
 **Supabase Realtime setup**: Run `supabase/rls-policies.sql` in Supabase SQL Editor to enable events RLS and Realtime. Without it, Supabase will still store events, but the viewer tab may not see them in real time until you refresh.
+
+## End-to-End Flow (Shine Reflection)
+
+1. **Create a session** as host: go to `/`, click Create Session.
+2. **Start Listening** and speak (or use "Type a note" to add transcript manually).
+3. Wait for the nudge timer (~60s) or click **Generate nudge now** to add Voices to Revisit.
+4. Click **End Meeting** to:
+   - Mark session as ended
+   - Generate a Shine Reflection Report (Gemini if `GEMINI_API_KEY` set, else mock)
+   - Create a meeting record and navigate to the dashboard
+5. On the **Dashboard** (`/dashboard`), click a meeting to view the full Shine Reflection Report: Voices to Revisit, Idea Flow, Recognition Patterns, Participation Notes, Try This Next Time, Amplification Toolkit (with copy buttons).

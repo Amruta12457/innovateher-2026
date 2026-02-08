@@ -31,3 +31,13 @@ export function createSessionMock(code: string, hostName: string): Session {
 export function getSessionByCodeMock(code: string): Session | null {
   return sessions.get(code.toUpperCase()) ?? null;
 }
+
+export function updateSessionStatusMock(sessionId: string, status: string): Session | null {
+  for (const [, s] of sessions) {
+    if (s.id === sessionId) {
+      s.status = status;
+      return s;
+    }
+  }
+  return null;
+}

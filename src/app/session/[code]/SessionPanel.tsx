@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fetchEvents, insertEvent, type EventRow } from '@/lib/events';
 
 type Session = {
@@ -28,6 +29,7 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
 }
 
 const CHUNK_MS = 10_000; // 10 seconds
+const NUDGE_INTERVAL_MS = 60_000; // 60s for demo (prod: 600_000)
 
 export default function SessionPanel({
   session,
@@ -44,6 +46,9 @@ export default function SessionPanel({
   const [micDenied, setMicDenied] = useState(false);
   const [transcribeWarning, setTranscribeWarning] = useState<string | null>(null);
   const [manualNote, setManualNote] = useState('');
+  const [nudgeLoading, setNudgeLoading] = useState(false);
+  const [endMeetingLoading, setEndMeetingLoading] = useState(false);
+  const router = useRouter();
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -52,6 +57,9 @@ export default function SessionPanel({
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
   );
+  const fullTranscript = transcriptChunks
+    .map((t) => (t.payload as { text?: string }).text ?? '')
+    .join(' ');
   const nudges = dedupeById(events.filter((e) => e.type === 'nudge'));
   const ideaBoard = nudges.map((e) => {
     const p = e.payload as NudgePayload;
@@ -260,6 +268,73 @@ export default function SessionPanel({
     setEvents([]);
   };
 
+  const transcriptRef = useRef('');
+  transcriptRef.current = fullTranscript;
+
+  const generateNudge = useCallback(async () => {
+    setNudgeLoading(true);
+    try {
+      const res = await fetch('/api/nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          transcriptSoFar: transcriptRef.current,
+          windowMinutes: 10,
+        }),
+      });
+      const data = await res.json();
+      const nudgesList = data?.nudges ?? [];
+      for (const n of nudgesList) {
+        await insertEvent(session.id, 'nudge', {
+          title: n.title,
+          owner: n.owner,
+          rationale: n.rationale,
+          suggested_phrase: n.suggested_phrase,
+          confidence: n.confidence ?? 0.8,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to generate nudge:', e);
+    } finally {
+      setNudgeLoading(false);
+    }
+  }, [session.id]);
+
+  useEffect(() => {
+    if (role !== 'host') return;
+    const interval = setInterval(generateNudge, NUDGE_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [role, generateNudge]);
+
+  const endMeeting = useCallback(async () => {
+    if (endMeetingLoading) return;
+    setEndMeetingLoading(true);
+    try {
+      await fetch('/api/sessions/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id, status: 'ended' }),
+      }).catch(() => {});
+
+      const reflectRes = await fetch('/api/reflect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id, transcript: fullTranscript }),
+      });
+      const reflection = await reflectRes.json();
+
+      const { createMeeting } = await import('@/lib/meetings');
+      const reflectionWithMeta = { ...reflection, _sessionCode: session.code };
+      await createMeeting(session.id, fullTranscript, reflectionWithMeta);
+
+      router.push('/dashboard');
+    } catch (e) {
+      console.error('Failed to end meeting:', e);
+      setEndMeetingLoading(false);
+    }
+  }, [session.id, fullTranscript, endMeetingLoading, router]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 flex items-center justify-center">
@@ -354,6 +429,20 @@ export default function SessionPanel({
             className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium"
           >
             Add test nudge
+          </button>
+          <button
+            onClick={generateNudge}
+            disabled={nudgeLoading}
+            className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium"
+          >
+            {nudgeLoading ? 'Generating…' : 'Generate nudge now'}
+          </button>
+          <button
+            onClick={endMeeting}
+            disabled={endMeetingLoading}
+            className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 disabled:opacity-60 text-white text-sm font-medium"
+          >
+            {endMeetingLoading ? 'Ending…' : 'End Meeting'}
           </button>
           <button
             onClick={clearLocalView}
