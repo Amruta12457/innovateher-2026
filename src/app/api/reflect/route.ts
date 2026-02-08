@@ -143,6 +143,7 @@ export async function POST(request: Request) {
 
     const prompt = `You are a meeting equity analyst. Generate a Shine Reflection Report. NOT a recap or summarizer. No action items or decisions.
 Focus on: voice equity, recognition, overlooked ideas, amplification, interruption patterns. Tone-safe and constructive.
+The transcript uses "Name: text" format for speaker attribution. Use "introduced_by" to credit who introduced each idea when known.
 Return STRICT JSON only:
 {
   "voices_to_revisit": [{"idea":"string","introduced_by":"string?","what_happened":"string","suggested_phrases":["string"]}],
