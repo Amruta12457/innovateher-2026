@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { generateSessionCode } from '@/lib/session-code';
 import { createSession } from '@/lib/sessions';
@@ -49,6 +50,12 @@ export default function LandingPage() {
         <p className="mt-2 text-amber-700/80">
           Shared-session meeting companion · InnovateHer 2026
         </p>
+        <Link
+          href="/dashboard"
+          className="mt-3 inline-block text-sm text-amber-600 hover:text-amber-800 font-medium"
+        >
+          → View Dashboard
+        </Link>
       </div>
 
       <div className="w-full max-w-md space-y-8">

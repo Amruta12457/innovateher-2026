@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fetchEvents, insertEvent, type EventRow } from '@/lib/events';
+import { startOverlapDetection } from '@/lib/overlap-detection';
 
 type Session = {
   id: string;
@@ -11,6 +13,7 @@ type Session = {
 };
 
 type NudgePayload = {
+  type?: string;
   title?: string;
   owner?: string;
   rationale?: string;
@@ -27,7 +30,12 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   });
 }
 
-const CHUNK_MS = 10_000; // 10 seconds
+const CHUNK_MS = 10_000;
+const NUDGE_INTERVAL_MS =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS
+    ? parseInt(process.env.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS, 10) * 1000
+    : 60_000) || 60_000;
+const INTERRUPTION_SNOOZE_MS = 30_000;
 
 export default function SessionPanel({
   session,
@@ -44,15 +52,29 @@ export default function SessionPanel({
   const [micDenied, setMicDenied] = useState(false);
   const [transcribeWarning, setTranscribeWarning] = useState<string | null>(null);
   const [manualNote, setManualNote] = useState('');
+  const [nudgeLoading, setNudgeLoading] = useState(false);
+  const [endMeetingLoading, setEndMeetingLoading] = useState(false);
+  const [interruptionDetectionEnabled, setInterruptionDetectionEnabled] = useState(true);
+  const [lastInterruption, setLastInterruption] = useState<{ id: string; at: number } | null>(null);
+  const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
+  const router = useRouter();
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const listeningRef = useRef(false);
+  const overlapDetectorRef = useRef<{ stop: () => void } | null>(null);
+  const transcriptRef = useRef('');
 
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
   );
   const nudges = dedupeById(events.filter((e) => e.type === 'nudge'));
+  const interruptions = dedupeById(events.filter((e) => e.type === 'interruption'));
+  const fullTranscript = transcriptChunks
+    .map((t) => (t.payload as { text?: string }).text ?? '')
+    .join(' ');
+  transcriptRef.current = fullTranscript;
+
   const ideaBoard = nudges.map((e) => {
     const p = e.payload as NudgePayload;
     return {
@@ -186,14 +208,38 @@ export default function SessionPanel({
 
       startNextSegment();
       setListening(true);
+
+      if (interruptionDetectionEnabled) {
+        overlapDetectorRef.current?.stop();
+        overlapDetectorRef.current = startOverlapDetection(stream, {
+          onInterruption: async (confidence) => {
+            try {
+              const ev = await insertEvent(session.id, 'interruption', {
+                timestamp: new Date().toISOString(),
+                confidence,
+                rationale:
+                  'Audio energy overlap detected; one speaker may have stopped shortly after overlap began.',
+              });
+              setLastInterruption({ id: ev.id, at: Date.now() });
+            } catch (err) {
+              console.warn('[overlap] Failed to insert interruption event:', err);
+            }
+          },
+          onError: () => {
+            setInterruptionDetectionEnabled(false);
+          },
+        });
+      }
     } catch (e) {
       setMicDenied(true);
       setListening(false);
     }
-  }, [transcribeChunk]);
+  }, [transcribeChunk, session.id, interruptionDetectionEnabled]);
 
   const stopListening = useCallback(() => {
     listeningRef.current = false;
+    overlapDetectorRef.current?.stop();
+    overlapDetectorRef.current = null;
     const recorder = recorderRef.current;
     if (recorder && recorder.state === 'recording') {
       recorder.stop();
@@ -245,6 +291,7 @@ export default function SessionPanel({
   const addTestNudge = async () => {
     try {
       await insertEvent(session.id, 'nudge', {
+        type: 'idea_revisit',
         title: 'Amplify this idea',
         owner: name,
         rationale: 'Strong point worth highlighting',
@@ -255,6 +302,90 @@ export default function SessionPanel({
       console.error('Failed to add nudge:', e);
     }
   };
+
+  const generateNudge = useCallback(async () => {
+    if (nudgeLoading) return;
+    setNudgeLoading(true);
+    try {
+      const transcript = transcriptRef.current;
+      const res = await fetch('/api/nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          transcriptSoFar: transcript,
+          windowMinutes: 10,
+        }),
+      });
+      const data = await res.json();
+      const nudgesList = data?.nudges ?? [];
+      for (const n of nudgesList) {
+        await insertEvent(session.id, 'nudge', {
+          type: n.type ?? 'idea_revisit',
+          title: n.title,
+          owner: n.owner,
+          rationale: n.rationale,
+          suggested_phrase: n.suggested_phrase,
+          confidence: n.confidence,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to generate nudge:', e);
+    } finally {
+      setNudgeLoading(false);
+    }
+  }, [session.id, nudgeLoading]);
+
+  const endMeeting = useCallback(async () => {
+    if (endMeetingLoading) return;
+    setEndMeetingLoading(true);
+    try {
+      await fetch('/api/sessions/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id, status: 'ended' }),
+      });
+      const transcript = transcriptRef.current;
+      const interruptionPayloads = interruptions.map((e) => e.payload);
+      const reflectRes = await fetch('/api/reflect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          transcript,
+          interruptionEvents: interruptionPayloads,
+        }),
+      });
+      const reflection = await reflectRes.json();
+      (reflection as Record<string, unknown>)._sessionCode = session.code;
+      await fetch('/api/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          transcript,
+          reflection,
+        }),
+      });
+      router.push('/dashboard');
+    } catch (e) {
+      console.error('Failed to end meeting:', e);
+      setEndMeetingLoading(false);
+    }
+  }, [session.id, session.code, endMeetingLoading, interruptions]);
+
+  useEffect(() => {
+    if (!listening || role !== 'host') return;
+    const t = setInterval(generateNudge, NUDGE_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [listening, role, generateNudge]);
+
+  const dismissInterruption = () => setLastInterruption(null);
+  const snoozeInterruption = () => {
+    setSnoozedUntil(Date.now() + INTERRUPTION_SNOOZE_MS);
+    setLastInterruption(null);
+  };
+  const showInterruptionCard = !!lastInterruption && Date.now() > snoozedUntil;
 
   const clearLocalView = () => {
     setEvents([]);
@@ -325,6 +456,34 @@ export default function SessionPanel({
         </div>
       )}
 
+      {/* Interruption card (host-only) */}
+      {role === 'host' && showInterruptionCard && (
+        <div className="mx-4 mt-2 p-3 rounded-lg bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="font-medium text-rose-900 text-sm">Possible interruption detected</p>
+            <p className="text-rose-700 text-xs mt-1 italic">Suggested phrases:</p>
+            <ul className="text-rose-800 text-sm space-y-0.5">
+              <li>&ldquo;Sorry, go ahead.&rdquo;</li>
+              <li>&ldquo;I think someone was finishing a thought.&rdquo;</li>
+            </ul>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={snoozeInterruption}
+              className="px-2 py-1 rounded bg-rose-200 hover:bg-rose-300 text-rose-900 text-xs font-medium"
+            >
+              Snooze
+            </button>
+            <button
+              onClick={dismissInterruption}
+              className="px-2 py-1 rounded bg-rose-300 hover:bg-rose-400 text-rose-900 text-xs font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Host-only controls */}
       {role === 'host' && (
         <div className="p-4 flex flex-wrap gap-2 border-b border-amber-200/40">
@@ -354,6 +513,20 @@ export default function SessionPanel({
             className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium"
           >
             Add test nudge
+          </button>
+          <button
+            onClick={generateNudge}
+            disabled={nudgeLoading}
+            className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium"
+          >
+            {nudgeLoading ? 'Generating…' : 'Generate nudge now'}
+          </button>
+          <button
+            onClick={endMeeting}
+            disabled={endMeetingLoading}
+            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white text-sm font-medium"
+          >
+            {endMeetingLoading ? 'Ending…' : 'End Meeting'}
           </button>
           <button
             onClick={clearLocalView}

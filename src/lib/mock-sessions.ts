@@ -12,9 +12,14 @@ export type Session = {
   created_at: string;
 };
 
-const globalForMock = globalThis as unknown as { __mockSessions?: Map<string, Session> };
+const globalForMock = globalThis as unknown as {
+  __mockSessions?: Map<string, Session>;
+  __mockSessionsById?: Map<string, Session>;
+};
 const sessions = globalForMock.__mockSessions ?? new Map<string, Session>();
+const sessionsById = globalForMock.__mockSessionsById ?? new Map<string, Session>();
 if (!globalForMock.__mockSessions) globalForMock.__mockSessions = sessions;
+if (!globalForMock.__mockSessionsById) globalForMock.__mockSessionsById = sessionsById;
 
 export function createSessionMock(code: string, hostName: string): Session {
   const session: Session = {
@@ -25,9 +30,17 @@ export function createSessionMock(code: string, hostName: string): Session {
     created_at: new Date().toISOString(),
   };
   sessions.set(code.toUpperCase(), session);
+  sessionsById.set(session.id, session);
   return session;
 }
 
 export function getSessionByCodeMock(code: string): Session | null {
   return sessions.get(code.toUpperCase()) ?? null;
+}
+
+export function updateSessionStatusMock(sessionId: string, status: string): boolean {
+  const s = sessionsById.get(sessionId);
+  if (!s) return false;
+  s.status = status;
+  return true;
 }

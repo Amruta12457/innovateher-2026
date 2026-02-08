@@ -34,6 +34,8 @@ The app works without these. If missing, it runs in **local mock mode** (in-memo
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key  |
 | `STT_PROVIDER`               | `mock` (default), `deepgram` (others can be added later) |
 | `STT_API_KEY`                | Deepgram API key (optional; mock used if missing) |
+| `GEMINI_API_KEY`             | Optional. For AI nudges and Shine Reflection Report. Uses mock if missing. **Never expose to client.** |
+| `NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS` | Optional. Seconds between auto-nudges (default: 60). |
 
 Create `.env.local` in the project root (same folder as `package.json`):
 
@@ -67,8 +69,9 @@ See `supabase/schema.sql` for the full DDL.
 - Supabase Realtime for events (when configured) or localStorage polling (mock)
 - Host-only: Start/Stop Listening (mic capture), Type a note fallback, test buttons
 - Session code generator (e.g. `SUNFLOWER-42`)
-
-Not yet implemented: additional STT providers, Gemini, dashboard.
+- **Overlap-based interruption detection** (Web Audio API, client-side) — detects possible interruptions via audio energy
+- AI nudges (`POST /api/nudge`) and Shine Reflection Report (`POST /api/reflect`) via Gemini (mock when `GEMINI_API_KEY` not set)
+- Meetings storage and dashboard: list meetings and view full Shine Reflection Report (including Interruption Patterns)
 
 ## STT (Speech-to-Text) Setup
 
@@ -116,3 +119,25 @@ To enable mic capture, allow the site in your browser (e.g. Chrome: click the lo
 5. **In the viewer tab**: new events should appear within ~1 second (mock) or instantly (Supabase Realtime).
 
 **Supabase Realtime setup**: Run `supabase/rls-policies.sql` in Supabase SQL Editor to enable events RLS and Realtime. Without it, Supabase will still store events, but the viewer tab may not see them in real time until you refresh.
+
+## Overlap-Based Interruption Detection
+
+The host browser uses the Web Audio API (AudioContext, AnalyserNode) to detect possible interruptions based on audio energy overlap:
+
+- **RMS threshold**: Default 0.03 (tune in `src/lib/overlap-detection.ts` — lower = more sensitive, higher = fewer false positives)
+- **Chrome recommended** for best compatibility with both MediaRecorder and AudioContext
+- If AudioContext fails or is unsupported, interruption detection is disabled gracefully; the session continues
+
+### Testing the Overlap Demo
+
+1. Create a session as host and click **Start Listening**.
+2. Speak into the mic; have a second person (or another tab playing audio) speak over you.
+3. When overlap is detected, a "Possible interruption detected" card appears with suggested phrases ("Sorry, go ahead", "I think someone was finishing a thought").
+4. Use **Dismiss** or **Snooze** to hide the card.
+
+### End-to-End Flow (Shine Reflection)
+
+1. Create a session as host; click **Start Listening** and speak (or use "Type a note").
+2. Wait for the nudge timer (~60s) or click **Generate nudge now** to add Voices to Revisit.
+3. Click **End Meeting** to generate a Shine Reflection Report (including interruption patterns) and navigate to the dashboard.
+4. On **Dashboard** (`/dashboard`), click a meeting to view the full report.
