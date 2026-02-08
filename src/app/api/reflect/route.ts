@@ -159,7 +159,7 @@ ${transcriptStr.slice(-8000)}${interruptStr}`;
 
     const ai = new GoogleGenAI({ apiKey: key });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
@@ -169,7 +169,7 @@ ${transcriptStr.slice(-8000)}${interruptStr}`;
       reflection = parseReflectionJson(text);
     } catch {
       const retry = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt + '\n\nIMPORTANT: Return valid JSON only. No markdown.',
       });
       reflection = parseReflectionJson((retry as { text?: string })?.text ?? '{}');

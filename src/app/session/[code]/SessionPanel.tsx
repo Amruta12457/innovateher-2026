@@ -306,23 +306,26 @@ export default function SessionPanel({
 
   const generateNudge = useCallback(async () => {
     if (nudgeLoading) return;
+    const chunks = transcriptChunks
+      .map((t) => (t.payload as { text?: string }).text ?? '')
+      .filter(Boolean);
+    const latestOnly = chunks.length > 0 ? chunks.slice(-1) : [];
+    if (latestOnly.length === 0) return;
     setNudgeLoading(true);
     try {
-      const chunks = transcriptChunks
-        .map((t) => (t.payload as { text?: string }).text ?? '')
-        .filter(Boolean);
       const res = await fetch('/api/nudge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          transcriptSoFar: transcriptRef.current,
-          transcriptChunks: chunks,
-          windowMinutes: 10,
+          transcriptSoFar: latestOnly[0],
+          transcriptChunks: latestOnly,
+          windowMinutes: 30,
         }),
       });
       const data = await res.json();
       const nudgesList = data?.nudges ?? [];
+      if (nudgesList.length === 0) return;
       for (const n of nudgesList) {
         await insertEvent(session.id, 'nudge', {
           type: n.type ?? 'idea_revisit',
@@ -486,8 +489,9 @@ export default function SessionPanel({
           </button>
           <button
             onClick={generateNudge}
-            disabled={nudgeLoading}
+            disabled={nudgeLoading || transcriptChunks.length === 0}
             className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium"
+            title={transcriptChunks.length === 0 ? 'Add a note first' : 'Analyze latest transcript for interrupted ideas'}
           >
             {nudgeLoading ? 'Generating…' : 'Generate nudge now'}
           </button>
