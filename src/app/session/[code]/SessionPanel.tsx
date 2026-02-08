@@ -103,8 +103,6 @@ export default function SessionPanel({
     return ideas.map((idea, i) => ({
       id: `${e.id}-${i}`,
       title: idea,
-      owner: p.owner ?? '',
-      status: p.confidence != null ? `${Math.round((p.confidence ?? 0) * 100)}%` : '',
     }));
   });
 
@@ -687,17 +685,9 @@ export default function SessionPanel({
             {ideaBoard.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-indigo-50/80 border border-indigo-100/80 transition-colors"
+                className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-100/80 transition-colors"
               >
                 <span className="font-medium text-indigo-900">{item.title}</span>
-                <div className="flex items-center gap-2 text-xs text-indigo-700">
-                  {item.owner && <span>{item.owner}</span>}
-                  {item.status && (
-                    <span className="px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-800">
-                      {item.status}
-                    </span>
-                  )}
-                </div>
               </div>
             ))}
           </div>

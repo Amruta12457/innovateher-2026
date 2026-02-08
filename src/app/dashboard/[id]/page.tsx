@@ -176,13 +176,7 @@ export default async function MeetingReportPage({
         {/* 4. Speaking Overlap Insights */}
         <section className="bg-white/90 backdrop-blur-xl rounded-2xl border border-indigo-100/80 p-6 shadow-lg shadow-indigo-100/30">
           <h2 className="text-lg font-semibold text-indigo-900 mb-4">Speaking Overlap Insights</h2>
-          <p className="text-xs text-indigo-600 mb-3 italic">
-            These insights support smoother facilitation. No individuals are identified.
-          </p>
           <div className="space-y-3">
-            <p className="text-sm text-indigo-800">
-              Moments of overlapping speech: <strong>{interrupt.total_overlap_events ?? 0}</strong>
-            </p>
             {Array.isArray(interrupt.patterns) && interrupt.patterns.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-indigo-800">Patterns</h4>
