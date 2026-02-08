@@ -71,6 +71,9 @@ export async function POST(request: Request) {
     let audioBuffer: ArrayBuffer | null = null;
     let contentType = 'audio/webm';
 
+    let participantId: string | null = null;
+    let displayName: string | null = null;
+
     const contentTypeHeader = request.headers.get('content-type');
     if (contentTypeHeader?.includes('multipart/form-data')) {
       const formData = await request.formData();
@@ -79,6 +82,8 @@ export async function POST(request: Request) {
         audioBuffer = await file.arrayBuffer();
         contentType = file.type || 'audio/webm';
       }
+      participantId = (formData.get('participantId') as string | null) || null;
+      displayName = (formData.get('displayName') as string | null) || null;
     } else if (contentTypeHeader?.startsWith('audio/')) {
       contentType = contentTypeHeader;
       audioBuffer = await request.arrayBuffer();
@@ -93,13 +98,25 @@ export async function POST(request: Request) {
         return NextResponse.json({
           text: result.text,
           stt_provider: 'deepgram',
+          ...(participantId && { participantId }),
+          ...(displayName && { displayName }),
         });
       }
       console.error('[transcribe] Deepgram fallback:', result.error);
-      return NextResponse.json(getMockResponse('mock_fallback'));
+      const mock = getMockResponse('mock_fallback');
+      return NextResponse.json({
+        ...mock,
+        ...(participantId && { participantId }),
+        ...(displayName && { displayName }),
+      });
     }
 
-    return NextResponse.json(getMockResponse());
+    const mock = getMockResponse();
+    return NextResponse.json({
+      ...mock,
+      ...(participantId && { participantId }),
+      ...(displayName && { displayName }),
+    });
   } catch (e) {
     console.error('[transcribe] Unexpected error:', e);
     return NextResponse.json(

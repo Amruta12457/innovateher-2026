@@ -127,6 +127,7 @@ STEP 2: Only if you see an abrupt jump from unrelated Topic A to unrelated Topic
 Default: {"nudges":[]}. When in doubt: {"nudges":[]}.
 
 Return STRICT JSON only. Either {"nudges":[]} or {"nudges":[{...}]}. Every nudge MUST include "interrupted_idea".
+Transcript may use "Name: text" format for speaker attribution. Include "owner" with the speaker name when you can identify who introduced the interrupted idea.
 {"nudges":[{"type":"idea_revisit","title":"Possible interruption","owner":"string or omit","interrupted_idea":"string (REQUIRED: the idea that was not explored enough)","rationale":"string","suggested_phrase":"string","confidence":0.0-1.0}]}
 
 ---

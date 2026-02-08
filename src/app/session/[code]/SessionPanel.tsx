@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchEvents, insertEvent, type EventRow } from '@/lib/events';
 import { startOverlapDetection } from '@/lib/overlap-detection';
+import { buildSpeakerLabeledTranscript } from '@/lib/transcript';
 
 type Session = {
   id: string;
@@ -66,15 +67,34 @@ export default function SessionPanel({
   const transcriptChunksRef = useRef<EventRow[]>([]);
   const nudgeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [participantIdentity, setParticipantIdentity] = useState<{
+    participantId: string;
+    displayName: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const STORAGE_KEY = 'shine-panel-participant-id';
+    let id = sessionStorage.getItem(STORAGE_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem(STORAGE_KEY, id);
+    }
+    setParticipantIdentity({ participantId: id, displayName: name || 'Participant' });
+  }, [name]);
+
+  const participantId = participantIdentity?.participantId ?? '';
+  const participantDisplayName = participantIdentity?.displayName ?? (name || 'Participant');
+
   const transcriptChunks = dedupeById(
     events.filter((e) => e.type === 'transcript_chunk')
   );
   const nudges = dedupeById(events.filter((e) => e.type === 'nudge'));
   const interruptions = dedupeById(events.filter((e) => e.type === 'interruption'));
+  const speakerLabeledTranscript = buildSpeakerLabeledTranscript(transcriptChunks);
   const fullTranscript = transcriptChunks
     .map((t) => (t.payload as { text?: string }).text ?? '')
     .join(' ');
-  transcriptRef.current = fullTranscript;
+  transcriptRef.current = speakerLabeledTranscript || fullTranscript;
   transcriptChunksRef.current = transcriptChunks;
 
   const ideaBoard = nudges.flatMap((e) => {
@@ -145,6 +165,8 @@ export default function SessionPanel({
         setTranscribeWarning(null);
         const form = new FormData();
         form.append('audio', blob);
+        if (participantId) form.append('participantId', participantId);
+        if (participantDisplayName) form.append('displayName', participantDisplayName);
         const res = await fetch('/api/transcribe', {
           method: 'POST',
           body: form,
@@ -157,6 +179,8 @@ export default function SessionPanel({
           ts: new Date().toISOString(),
           source: 'mic',
           stt_provider: sttProvider,
+          user_id: participantId || data?.participantId,
+          display_name: participantDisplayName || data?.displayName,
         };
         if (data?.stt_status) payload.stt_status = data.stt_status;
         await insertEvent(session.id, 'transcript_chunk', payload);
@@ -164,7 +188,7 @@ export default function SessionPanel({
         setTranscribeWarning('Transcript failed. Try typing a note.');
       }
     },
-    [session.id]
+    [session.id, participantId, participantDisplayName]
   );
 
   const startListening = useCallback(async () => {
@@ -275,6 +299,8 @@ export default function SessionPanel({
         text,
         ts: new Date().toISOString(),
         source: 'manual',
+        user_id: participantId,
+        display_name: participantDisplayName,
       });
       setManualNote('');
     } catch (e) {
@@ -288,6 +314,8 @@ export default function SessionPanel({
         text: 'Test chunk from host at ' + new Date().toLocaleTimeString(),
         ts: new Date().toISOString(),
         source: 'test',
+        user_id: participantId,
+        display_name: participantDisplayName,
       });
     } catch (e) {
       console.error('Failed to add transcript chunk:', e);
@@ -316,20 +344,18 @@ export default function SessionPanel({
     const recentChunks = chunks.filter(
       (t) => new Date(t.created_at).getTime() >= tenMinAgo
     );
-    const chunkTexts = recentChunks
-      .map((t) => (t.payload as { text?: string }).text ?? '')
-      .filter(Boolean);
-    if (chunkTexts.length === 0) return;
+    const speakerChunks = buildSpeakerLabeledTranscript(recentChunks).split('\n').filter(Boolean);
+    if (speakerChunks.length === 0) return;
     setNudgeLoading(true);
     try {
-      const transcript = chunkTexts.join(' ');
+      const transcript = buildSpeakerLabeledTranscript(recentChunks);
       const res = await fetch('/api/nudge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
           transcriptSoFar: transcript,
-          transcriptChunks: chunkTexts,
+          transcriptChunks: speakerChunks,
           windowMinutes: 10,
         }),
       });
@@ -367,20 +393,18 @@ export default function SessionPanel({
 
   const generateNudge = useCallback(async () => {
     if (nudgeLoading) return;
-    const chunks = transcriptChunks
-      .map((t) => (t.payload as { text?: string }).text ?? '')
-      .filter(Boolean);
-    const latestOnly = chunks.length > 0 ? chunks.slice(-1) : [];
-    if (latestOnly.length === 0) return;
+    const speakerChunks = buildSpeakerLabeledTranscript(transcriptChunks).split('\n').filter(Boolean);
+    if (speakerChunks.length === 0) return;
     setNudgeLoading(true);
     try {
+      const transcript = buildSpeakerLabeledTranscript(transcriptChunks);
       const res = await fetch('/api/nudge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          transcriptSoFar: latestOnly[0],
-          transcriptChunks: latestOnly,
+          transcriptSoFar: transcript,
+          transcriptChunks: speakerChunks,
           windowMinutes: 10,
         }),
       });
@@ -425,7 +449,7 @@ export default function SessionPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id, status: 'ended' }),
       });
-      const transcript = transcriptRef.current;
+      const transcript = buildSpeakerLabeledTranscript(transcriptChunks);
       const interruptionPayloads = interruptions.map((e) => e.payload);
       const reflectRes = await fetch('/api/reflect', {
         method: 'POST',
@@ -452,7 +476,7 @@ export default function SessionPanel({
       console.error('Failed to end meeting:', e);
       setEndMeetingLoading(false);
     }
-  }, [session.id, session.code, endMeetingLoading, interruptions]);
+  }, [session.id, session.code, endMeetingLoading, interruptions, transcriptChunks]);
 
   useEffect(() => {
     if (!listening || role !== 'host') return;
@@ -492,7 +516,7 @@ export default function SessionPanel({
           >
             Copy link
           </button>
-          {role === 'host' && (
+          {(role === 'host' || listening) && (
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                 listening
@@ -505,7 +529,7 @@ export default function SessionPanel({
                   listening ? 'bg-emerald-500' : 'bg-slate-400'
                 }`}
               />
-              {listening ? 'Listening' : 'Not listening'}
+              {listening ? (role === 'host' ? 'Listening' : 'Contributing') : 'Not listening'}
             </span>
           )}
         </div>
@@ -524,37 +548,38 @@ export default function SessionPanel({
       </header>
 
       {/* Mic denied banner */}
-      {role === 'host' && micDenied && (
+      {micDenied && (
         <div className="px-4 py-2 bg-amber-100 border-b border-amber-200 text-amber-900 text-sm">
           Mic access denied. Use &ldquo;Type a note&rdquo; below to add transcript manually.
         </div>
       )}
 
       {/* Transcribe warning */}
-      {role === 'host' && transcribeWarning && (
+      {transcribeWarning && (
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
           {transcribeWarning}
         </div>
       )}
 
-      {/* Host-only controls */}
-      {role === 'host' && (
-        <div className="p-4 flex flex-wrap gap-2 border-b border-amber-200/40">
-          {!listening ? (
-            <button
-              onClick={startListening}
-              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold border-2 border-emerald-900 shadow-md"
-            >
-              Start Listening
-            </button>
-          ) : (
-            <button
-              onClick={stopListening}
-              className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm font-semibold border-2 border-rose-900 shadow-md"
-            >
-              Stop Listening
-            </button>
-          )}
+      {/* Mic controls - all participants */}
+      <div className="p-4 flex flex-wrap gap-2 border-b border-amber-200/40">
+        {!listening ? (
+          <button
+            onClick={startListening}
+            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold border-2 border-emerald-900 shadow-md"
+          >
+            {role === 'host' ? 'Start Listening' : 'Enable mic to contribute'}
+          </button>
+        ) : (
+          <button
+            onClick={stopListening}
+            className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm font-semibold border-2 border-rose-900 shadow-md"
+          >
+            {role === 'host' ? 'Stop Listening' : 'Stop contributing'}
+          </button>
+        )}
+        {role === 'host' && (
+          <>
           <button
             onClick={addTestTranscript}
             className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium"
@@ -588,12 +613,12 @@ export default function SessionPanel({
           >
             Clear local view
           </button>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
-      {/* Type a note (host fallback) */}
-      {role === 'host' && (
-        <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-amber-200/40 bg-white/60">
+      {/* Type a note - all participants */}
+      <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-amber-200/40 bg-white/60">
           <input
             type="text"
             placeholder="Type a note..."
@@ -609,7 +634,6 @@ export default function SessionPanel({
             Add note
           </button>
         </div>
-      )}
 
       {/* Main content */}
       <main className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 max-w-6xl w-full mx-auto">
@@ -680,24 +704,28 @@ export default function SessionPanel({
         </section>
       </main>
 
-      {/* Transcript Feed (host-only) */}
-      {role === 'host' && (
-        <section className="p-4 border-t border-amber-200/60 bg-white/60">
-          <h2 className="text-lg font-semibold text-amber-900 mb-3">
-            Transcript Feed
-          </h2>
-          <div className="max-h-32 overflow-y-auto space-y-1 text-sm text-amber-800">
-            {transcriptChunks.length === 0 && (
-              <p className="text-amber-600/80">No transcript chunks yet</p>
-            )}
-            {transcriptChunks.map((t) => (
+      {/* Transcript Feed - all participants */}
+      <section className="p-4 border-t border-amber-200/60 bg-white/60">
+        <h2 className="text-lg font-semibold text-amber-900 mb-3">
+          Transcript Feed
+        </h2>
+        <div className="max-h-32 overflow-y-auto space-y-1 text-sm text-amber-800">
+          {transcriptChunks.length === 0 && (
+            <p className="text-amber-600/80">No transcript chunks yet</p>
+          )}
+          {transcriptChunks.map((t) => {
+            const p = t.payload as { text?: string; display_name?: string };
+            const label = p.display_name || 'Speaker';
+            const text = p.text ?? '(no text)';
+            return (
               <div key={t.id} className="py-1">
-                {(t.payload as { text?: string }).text ?? '(no text)'}
+                <span className="font-medium text-amber-900">{label}:</span>{' '}
+                {text}
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+            );
+          })}
+        </div>
+      </section>
 
       <div className="p-4">
         <Link
