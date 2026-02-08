@@ -308,35 +308,6 @@ export default function SessionPanel({
     }
   };
 
-  const addTestTranscript = async () => {
-    try {
-      await insertEvent(session.id, 'transcript_chunk', {
-        text: 'Test chunk from host at ' + new Date().toLocaleTimeString(),
-        ts: new Date().toISOString(),
-        source: 'test',
-        user_id: participantId,
-        display_name: participantDisplayName,
-      });
-    } catch (e) {
-      console.error('Failed to add transcript chunk:', e);
-    }
-  };
-
-  const addTestNudge = async () => {
-    try {
-      await insertEvent(session.id, 'nudge', {
-        type: 'idea_revisit',
-        title: 'Possible Interruption',
-        interrupted_idea: 'Their point about the project timeline',
-        rationale: 'Abrupt topic change',
-        suggested_phrase: "Let's revisit that thought",
-        confidence: 0.9,
-      });
-    } catch (e) {
-      console.error('Failed to add nudge:', e);
-    }
-  };
-
   const generateNudgeFromLast10Min = useCallback(async () => {
     if (nudgeLoading) return;
     const chunks = transcriptChunksRef.current;
@@ -390,55 +361,6 @@ export default function SessionPanel({
       setNudgeLoading(false);
     }
   }, [session.id, nudgeLoading]);
-
-  const generateNudge = useCallback(async () => {
-    if (nudgeLoading) return;
-    const speakerChunks = buildSpeakerLabeledTranscript(transcriptChunks).split('\n').filter(Boolean);
-    if (speakerChunks.length === 0) return;
-    setNudgeLoading(true);
-    try {
-      const transcript = buildSpeakerLabeledTranscript(transcriptChunks);
-      const res = await fetch('/api/nudge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session.id,
-          transcriptSoFar: transcript,
-          transcriptChunks: speakerChunks,
-          windowMinutes: 10,
-        }),
-      });
-      const data = await res.json();
-      const nudgesList = data?.nudges ?? [];
-      if (nudgesList.length === 0) return;
-      for (const n of nudgesList) {
-        const payload = {
-          type: n.type ?? 'idea_revisit',
-          title: n.title,
-          owner: n.owner,
-          interrupted_idea: n.interrupted_idea,
-          extracted_ideas: n.extracted_ideas,
-          rationale: n.rationale,
-          suggested_phrase: n.suggested_phrase,
-          confidence: n.confidence,
-        };
-        const inserted = await insertEvent(session.id, 'nudge', payload);
-        setEvents((prev) => {
-          if (prev.some((e) => e.id === inserted.id)) return prev;
-          const next = [...prev, inserted].sort(
-            (a, b) =>
-              new Date(a.created_at).getTime() -
-              new Date(b.created_at).getTime()
-          );
-          return next.slice(-50);
-        });
-      }
-    } catch (e) {
-      console.error('Failed to generate nudge:', e);
-    } finally {
-      setNudgeLoading(false);
-    }
-  }, [session.id, nudgeLoading, transcriptChunks]);
 
   const endMeeting = useCallback(async () => {
     if (endMeetingLoading) return;
@@ -520,13 +442,13 @@ export default function SessionPanel({
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                 listening
-                  ? 'bg-teal-100 text-teal-800 animate-pulse'
+                  ? 'bg-accent-lavender/20 text-accent-built animate-pulse'
                   : 'bg-slate-100 text-slate-600'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  listening ? 'bg-accent-success' : 'bg-slate-400'
+                  listening ? 'bg-accent-start' : 'bg-slate-400'
                 }`}
               />
               {listening ? (role === 'host' ? 'Listening' : 'Contributing') : 'Not listening'}
@@ -566,7 +488,7 @@ export default function SessionPanel({
         {!listening ? (
           <button
             onClick={startListening}
-            className="px-3 py-1.5 rounded-lg bg-accent-success hover:bg-teal-700 text-white text-sm font-semibold shadow-md"
+            className="px-3 py-1.5 rounded-lg bg-accent-start hover:bg-accent-start-hover text-white text-sm font-semibold shadow-md"
           >
             {role === 'host' ? 'Start Listening' : 'Enable mic to contribute'}
           </button>
@@ -580,26 +502,6 @@ export default function SessionPanel({
         )}
         {role === 'host' && (
           <>
-          <button
-            onClick={addTestTranscript}
-            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium"
-          >
-            Add test transcript chunk
-          </button>
-          <button
-            onClick={addTestNudge}
-            className="px-3 py-1.5 rounded-lg bg-primary-muted hover:bg-primary-hover text-white text-sm font-medium"
-          >
-            Add test nudge
-          </button>
-          <button
-            onClick={generateNudge}
-            disabled={nudgeLoading || transcriptChunks.length === 0}
-            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium"
-            title={transcriptChunks.length === 0 ? 'Add a note first' : 'Analyze latest transcript for interrupted ideas'}
-          >
-            {nudgeLoading ? 'Generating…' : 'Generate nudge now'}
-          </button>
           <button
             onClick={endMeeting}
             disabled={endMeetingLoading}
