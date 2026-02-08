@@ -63,8 +63,8 @@ const MOCK_REFLECTION: Reflection = {
     },
   ],
   recognition_patterns: {
-    explicit_credit_examples: ['Team member acknowledged contributions.'],
-    missed_credit_opportunities: ['Consider naming who introduced key ideas.'],
+    explicit_credit_examples: ['Contributions were acknowledged.'],
+    missed_credit_opportunities: ['Opportunities to name who introduced key ideas.'],
     overall_note: 'Constructive meeting; room to amplify voices.',
   },
   participation_notes: {
@@ -128,22 +128,29 @@ export async function POST(request: Request) {
       const mock = { ...MOCK_REFLECTION };
       mock.interruption_summary.total_overlap_events = events.length;
       if (events.length > 0) {
-        mock.interruption_summary.patterns = ['Audio energy overlap detected during speaking.'];
+        mock.interruption_summary.patterns = ['Moments of overlapping speech were detected.'];
         mock.interruption_summary.facilitation_suggestions = [
           'Pause before switching topics to allow others to finish.',
-          '"Sorry, go ahead" if overlap was you interrupting.',
+          'A simple "Sorry, go ahead" can help when overlap happens.',
         ];
       }
       return NextResponse.json(mock);
     }
 
     const interruptStr = events.length > 0
-      ? `\nInterruption events (${events.length}): ${JSON.stringify(events.slice(-20))}`
+      ? `\nNote: ${events.length} overlap event(s) detected. Do NOT include participant names in interruption_summary — anonymize all references.`
       : '';
 
     const prompt = `You are a meeting equity analyst. Generate a Shine Reflection Report. NOT a recap or summarizer. No action items or decisions.
-Focus on: voice equity, recognition, overlooked ideas, amplification, interruption patterns. Tone-safe and constructive.
-The transcript uses "Name: text" format for speaker attribution. Use "introduced_by" to credit who introduced each idea when known.
+
+TONE RULES (CRITICAL):
+- Use supportive, constructive language. NEVER accusatory. Never blame, shame, or criticize individuals.
+- When describing interruptions or overlaps: ANONYMIZE. Use phrases like "someone" or "a participant" — NEVER reveal who was interrupted or who may have interrupted.
+- When crediting ideas: USE REAL NAMES from the transcript. Attribute each idea to the person who introduced it first (introduced_by).
+- The report should feel like helpful facilitation insights, not a critique of anyone.
+
+The transcript uses "Name: text" format. Use introduced_by with the actual name when crediting who brought up an idea. For interruption_summary patterns and facilitation_suggestions, never name anyone.
+
 Return STRICT JSON only:
 {
   "voices_to_revisit": [{"idea":"string","introduced_by":"string?","what_happened":"string","suggested_phrases":["string"]}],

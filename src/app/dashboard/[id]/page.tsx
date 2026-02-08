@@ -3,6 +3,22 @@ import { notFound } from 'next/navigation';
 import { getMeetingById } from '@/lib/meetings';
 import CopyButton from './CopyButton';
 
+function StatusTag({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const styles: Record<string, string> = {
+    ongoing: 'bg-emerald-500/90 text-white',
+    built_upon: 'bg-blue-500/90 text-white',
+    dropped: 'bg-slate-500/90 text-white',
+    reframed: 'bg-violet-500/90 text-white',
+  };
+  const cls = styles[s] ?? 'bg-amber-500/90 text-white';
+  return (
+    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
 type Reflection = {
   voices_to_revisit?: Array<{
     idea?: string;
@@ -83,7 +99,11 @@ export default async function MeetingReportPage({
               {voices.map((v, i) => (
                 <div key={i} className="p-4 rounded-lg bg-amber-50/80 border border-amber-200/40">
                   <h3 className="font-medium text-amber-900">{v.idea ?? '—'}</h3>
-                  {v.introduced_by && <p className="text-xs text-amber-700 mt-1">— {v.introduced_by}</p>}
+                  {v.introduced_by && (
+                    <p className="text-sm text-amber-800 mt-1 font-medium">
+                      Introduced by {v.introduced_by}
+                    </p>
+                  )}
                   <p className="text-sm text-amber-800 mt-2">{v.what_happened ?? ''}</p>
                   {Array.isArray(v.suggested_phrases) && v.suggested_phrases.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -112,9 +132,13 @@ export default async function MeetingReportPage({
                 <li key={i} className="flex justify-between items-start p-2 rounded bg-amber-50/80">
                   <div>
                     <span className="font-medium text-amber-900">{item.idea ?? '—'}</span>
-                    {item.introduced_by && <span className="text-amber-700 text-sm ml-1">({item.introduced_by})</span>}
+                    {item.introduced_by && (
+                      <span className="text-amber-800 text-sm ml-1 font-medium">
+                        — introduced by {item.introduced_by}
+                      </span>
+                    )}
                   </div>
-                  <span className="text-xs px-2 py-0.5 rounded bg-amber-100">{item.status ?? '—'}</span>
+                  <StatusTag status={item.status ?? '—'} />
                 </li>
               ))}
             </ul>
@@ -137,7 +161,7 @@ export default async function MeetingReportPage({
             )}
             {Array.isArray(recog.missed_credit_opportunities) && recog.missed_credit_opportunities.length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-amber-800">Missed credit opportunities</h4>
+                <h4 className="text-sm font-medium text-amber-800">Opportunities to amplify recognition</h4>
                 <ul className="list-disc list-inside text-sm text-amber-800">
                   {recog.missed_credit_opportunities.map((s, i) => (
                     <li key={i}>{s}</li>
@@ -149,12 +173,15 @@ export default async function MeetingReportPage({
           </div>
         </section>
 
-        {/* 4. Interruption Patterns (new) */}
+        {/* 4. Speaking Overlap Insights */}
         <section className="bg-white/80 rounded-xl border border-amber-200/60 p-6">
-          <h2 className="text-lg font-semibold text-amber-900 mb-4">Interruption Patterns</h2>
+          <h2 className="text-lg font-semibold text-amber-900 mb-4">Speaking Overlap Insights</h2>
+          <p className="text-xs text-amber-600 mb-3 italic">
+            These insights support smoother facilitation. No individuals are identified.
+          </p>
           <div className="space-y-3">
             <p className="text-sm text-amber-800">
-              Total overlap events detected: <strong>{interrupt.total_overlap_events ?? 0}</strong>
+              Moments of overlapping speech: <strong>{interrupt.total_overlap_events ?? 0}</strong>
             </p>
             {Array.isArray(interrupt.patterns) && interrupt.patterns.length > 0 && (
               <div>
@@ -177,7 +204,7 @@ export default async function MeetingReportPage({
               </div>
             )}
             {(!interrupt.patterns?.length && !interrupt.facilitation_suggestions?.length && (interrupt.total_overlap_events ?? 0) === 0) && (
-              <p className="text-amber-600/80 text-sm">No overlap events detected in this meeting.</p>
+              <p className="text-amber-600/80 text-sm">No overlapping speech detected in this meeting.</p>
             )}
           </div>
         </section>
