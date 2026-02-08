@@ -11,11 +11,11 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
-      <header className="p-4 border-b border-amber-200/60 bg-white/80 backdrop-blur">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50/90 via-violet-50/70 to-fuchsia-50/80">
+      <header className="p-4 border-b border-indigo-100/80 bg-white/90 backdrop-blur-xl shadow-sm">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-amber-900">Shine Dashboard</h1>
-          <Link href="/" className="text-amber-700 hover:text-amber-900 font-medium text-sm">
+          <h1 className="text-xl font-bold text-indigo-900">Shine Dashboard</h1>
+          <Link href="/" className="text-indigo-600 hover:text-indigo-900 font-medium text-sm transition-colors">
             New session
           </Link>
         </div>
@@ -23,7 +23,7 @@ export default async function DashboardPage() {
 
       <main className="max-w-4xl mx-auto p-6">
         {meetings.length === 0 ? (
-          <p className="text-amber-700">No meetings yet. End a session to see Shine Reflection Reports here.</p>
+          <p className="text-indigo-700">No meetings yet. End a session to see Shine Reflection Reports here.</p>
         ) : (
           <ul className="space-y-3">
             {meetings.map((m) => {
@@ -32,14 +32,14 @@ export default async function DashboardPage() {
                 <li key={m.id}>
                   <Link
                     href={`/dashboard/${m.id}`}
-                    className="block p-4 rounded-xl border border-amber-200/60 bg-white/80 hover:bg-amber-50/80 transition-colors"
+                    className="block p-5 rounded-2xl border border-indigo-100/80 bg-white/90 hover:bg-white shadow-lg shadow-indigo-100/30 hover:shadow-xl hover:shadow-indigo-100/40 transition-all"
                   >
-                    <span className="font-medium text-amber-900">{code(ref)}</span>
-                    <span className="text-amber-600 text-sm ml-2">
+                    <span className="font-medium text-indigo-900">{code(ref)}</span>
+                    <span className="text-indigo-600 text-sm ml-2">
                       {new Date(m.created_at).toLocaleString()}
                     </span>
                     {highlight(ref) && (
-                      <p className="text-sm text-amber-700 mt-1 line-clamp-2">{highlight(ref)}</p>
+                      <p className="text-sm text-indigo-700 mt-1 line-clamp-2">{highlight(ref)}</p>
                     )}
                   </Link>
                 </li>

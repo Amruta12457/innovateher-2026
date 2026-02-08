@@ -12,7 +12,7 @@ export default function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={copy}
-      className="px-2 py-0.5 rounded text-xs bg-amber-200 hover:bg-amber-300 text-amber-900"
+      className="px-2 py-0.5 rounded-lg text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-800 transition-colors"
     >
       {copied ? 'Copied!' : 'Copy'}
     </button>
