@@ -11,11 +11,11 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
-      <header className="p-4 border-b border-amber-200/60 bg-white/80 backdrop-blur">
+    <div className="min-h-screen bg-surface">
+      <header className="p-4 border-b border-border bg-surface-elevated backdrop-blur">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-bold text-amber-900">Shine Dashboard</h1>
-          <Link href="/" className="text-amber-700 hover:text-amber-900 font-medium text-sm">
+          <h1 className="text-xl font-bold text-heading">Shine Dashboard</h1>
+          <Link href="/" className="text-muted hover:text-heading font-medium text-sm">
             New session
           </Link>
         </div>
@@ -23,7 +23,7 @@ export default async function DashboardPage() {
 
       <main className="max-w-4xl mx-auto p-6">
         {meetings.length === 0 ? (
-          <p className="text-amber-700">No meetings yet. End a session to see Shine Reflection Reports here.</p>
+          <p className="text-muted">No meetings yet. End a session to see Shine Reflection Reports here.</p>
         ) : (
           <ul className="space-y-3">
             {meetings.map((m) => {
@@ -32,14 +32,14 @@ export default async function DashboardPage() {
                 <li key={m.id}>
                   <Link
                     href={`/dashboard/${m.id}`}
-                    className="block p-4 rounded-xl border border-amber-200/60 bg-white/80 hover:bg-amber-50/80 transition-colors"
+                    className="block p-4 rounded-xl border border-border bg-surface-elevated hover:bg-surface-subtle transition-colors"
                   >
-                    <span className="font-medium text-amber-900">{code(ref)}</span>
-                    <span className="text-amber-600 text-sm ml-2">
+                    <span className="font-medium text-heading">{code(ref)}</span>
+                    <span className="text-muted text-sm ml-2">
                       {new Date(m.created_at).toLocaleString()}
                     </span>
                     {highlight(ref) && (
-                      <p className="text-sm text-amber-700 mt-1 line-clamp-2">{highlight(ref)}</p>
+                      <p className="text-sm text-muted mt-1 line-clamp-2">{highlight(ref)}</p>
                     )}
                   </Link>
                 </li>

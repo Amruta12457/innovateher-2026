@@ -498,21 +498,21 @@ export default function SessionPanel({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 flex items-center justify-center">
-        <p className="text-amber-700">Loading session…</p>
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <p className="text-muted">Loading session…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 flex flex-col">
+    <div className="min-h-screen bg-surface flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between p-4 bg-white/80 backdrop-blur border-b border-amber-200/60">
+      <header className="flex items-center justify-between p-4 bg-surface-elevated backdrop-blur border-b border-border">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-amber-900">{session.code}</h1>
+          <h1 className="text-xl font-bold text-heading">{session.code}</h1>
           <button
             onClick={copyLink}
-            className="px-3 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-sm font-medium"
+            className="px-3 py-1 rounded-lg bg-surface-subtle hover:bg-border text-heading text-sm font-medium"
           >
             Copy link
           </button>
@@ -520,13 +520,13 @@ export default function SessionPanel({
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                 listening
-                  ? 'bg-emerald-100 text-emerald-800 animate-pulse'
+                  ? 'bg-teal-100 text-teal-800 animate-pulse'
                   : 'bg-slate-100 text-slate-600'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  listening ? 'bg-emerald-500' : 'bg-slate-400'
+                  listening ? 'bg-accent-success' : 'bg-slate-400'
                 }`}
               />
               {listening ? (role === 'host' ? 'Listening' : 'Contributing') : 'Not listening'}
@@ -537,43 +537,43 @@ export default function SessionPanel({
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
               role === 'host'
-                ? 'bg-amber-200 text-amber-900'
+                ? 'bg-primary/15 text-primary'
                 : 'bg-slate-100 text-slate-700'
             }`}
           >
             {role}
           </span>
-          <span className="text-sm text-amber-700">{name}</span>
+          <span className="text-sm text-muted">{name}</span>
         </div>
       </header>
 
       {/* Mic denied banner */}
       {micDenied && (
-        <div className="px-4 py-2 bg-amber-100 border-b border-amber-200 text-amber-900 text-sm">
+        <div className="px-4 py-2 bg-surface-subtle border-b border-border text-heading text-sm">
           Mic access denied. Use &ldquo;Type a note&rdquo; below to add transcript manually.
         </div>
       )}
 
       {/* Transcribe warning */}
       {transcribeWarning && (
-        <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
+        <div className="px-4 py-2 bg-surface-subtle border-b border-border text-heading text-sm">
           {transcribeWarning}
         </div>
       )}
 
       {/* Mic controls - all participants */}
-      <div className="p-4 flex flex-wrap gap-2 border-b border-amber-200/40">
+      <div className="p-4 flex flex-wrap gap-2 border-b border-border">
         {!listening ? (
           <button
             onClick={startListening}
-            className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-semibold border-2 border-emerald-900 shadow-md"
+            className="px-3 py-1.5 rounded-lg bg-accent-success hover:bg-teal-700 text-white text-sm font-semibold shadow-md"
           >
             {role === 'host' ? 'Start Listening' : 'Enable mic to contribute'}
           </button>
         ) : (
           <button
             onClick={stopListening}
-            className="px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-sm font-semibold border-2 border-rose-900 shadow-md"
+            className="px-3 py-1.5 rounded-lg bg-accent-destructive hover:bg-accent-destructive-hover text-white text-sm font-semibold shadow-md"
           >
             {role === 'host' ? 'Stop Listening' : 'Stop contributing'}
           </button>
@@ -582,20 +582,20 @@ export default function SessionPanel({
           <>
           <button
             onClick={addTestTranscript}
-            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium"
           >
             Add test transcript chunk
           </button>
           <button
             onClick={addTestNudge}
-            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-lg bg-primary-muted hover:bg-primary-hover text-white text-sm font-medium"
           >
             Add test nudge
           </button>
           <button
             onClick={generateNudge}
             disabled={nudgeLoading || transcriptChunks.length === 0}
-            className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium"
             title={transcriptChunks.length === 0 ? 'Add a note first' : 'Analyze latest transcript for interrupted ideas'}
           >
             {nudgeLoading ? 'Generating…' : 'Generate nudge now'}
@@ -603,13 +603,13 @@ export default function SessionPanel({
           <button
             onClick={endMeeting}
             disabled={endMeetingLoading}
-            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-lg bg-accent-destructive hover:bg-accent-destructive-hover disabled:opacity-60 text-white text-sm font-medium"
           >
             {endMeetingLoading ? 'Ending…' : 'End Meeting'}
           </button>
           <button
             onClick={clearLocalView}
-            className="px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium"
+            className="px-3 py-1.5 rounded-lg bg-surface-subtle hover:bg-border text-muted text-sm font-medium"
           >
             Clear local view
           </button>
@@ -618,18 +618,18 @@ export default function SessionPanel({
       </div>
 
       {/* Type a note - all participants */}
-      <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-amber-200/40 bg-white/60">
+      <div className="px-4 py-3 flex flex-wrap gap-2 border-b border-border bg-white/60">
           <input
             type="text"
             placeholder="Type a note..."
             value={manualNote}
             onChange={(e) => setManualNote(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addManualNote()}
-            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-amber-200 bg-white text-amber-900 placeholder-amber-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none"
+            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg border border-border bg-surface-elevated text-heading placeholder-muted-light focus:ring-2 focus:ring-primary focus:border-primary outline-none"
           />
           <button
             onClick={addManualNote}
-            className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium"
+            className="px-3 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium"
           >
             Add note
           </button>
@@ -638,13 +638,13 @@ export default function SessionPanel({
       {/* Main content */}
       <main className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 max-w-6xl w-full mx-auto">
         {/* Left: Voices to Revisit */}
-        <section className="bg-white/80 backdrop-blur rounded-xl border border-amber-200/60 p-4 min-h-[200px]">
-          <h2 className="text-lg font-semibold text-amber-900 mb-3">
+        <section className="bg-surface-elevated backdrop-blur rounded-xl border border-border p-4 min-h-[200px]">
+          <h2 className="text-lg font-semibold text-heading mb-3">
             Voices to Revisit
           </h2>
           <ul className="space-y-2">
             {nudges.length === 0 && (
-              <li className="text-amber-600/80 text-sm">No nudges yet</li>
+              <li className="text-muted text-sm">No nudges yet</li>
             )}
             {nudges
               .sort(
@@ -658,13 +658,13 @@ export default function SessionPanel({
                 return (
                   <li
                     key={e.id}
-                    className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/40"
+                    className="p-2 rounded-lg bg-surface-subtle border border-border"
                   >
-                    <div className="font-medium text-amber-900">
+                    <div className="font-medium text-heading">
                       Possible Interruption
                     </div>
                     {topic && (
-                      <div className="text-sm text-amber-800 mt-1">
+                      <div className="text-sm text-heading mt-1">
                         <span className="font-medium">Topic that was interrupted: </span>
                         {topic}
                       </div>
@@ -676,24 +676,24 @@ export default function SessionPanel({
         </section>
 
         {/* Right: Idea Board */}
-        <section className="bg-white/80 backdrop-blur rounded-xl border border-amber-200/60 p-4 min-h-[200px]">
-          <h2 className="text-lg font-semibold text-amber-900 mb-3">
+        <section className="bg-surface-elevated backdrop-blur rounded-xl border border-border p-4 min-h-[200px]">
+          <h2 className="text-lg font-semibold text-heading mb-3">
             Idea Board
           </h2>
           <div className="space-y-2">
             {ideaBoard.length === 0 && (
-              <p className="text-amber-600/80 text-sm">No ideas yet</p>
+              <p className="text-muted text-sm">No ideas yet</p>
             )}
             {ideaBoard.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-2 rounded-lg bg-amber-50/80 border border-amber-200/40"
+                className="flex items-center justify-between p-2 rounded-lg bg-surface-subtle border border-border"
               >
-                <span className="font-medium text-amber-900">{item.title}</span>
-                <div className="flex items-center gap-2 text-xs text-amber-700">
+                <span className="font-medium text-heading">{item.title}</span>
+                <div className="flex items-center gap-2 text-xs text-muted">
                   {item.owner && <span>{item.owner}</span>}
                   {item.status && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-100">
+                    <span className="px-1.5 py-0.5 rounded bg-primary/10">
                       {item.status}
                     </span>
                   )}
@@ -705,13 +705,13 @@ export default function SessionPanel({
       </main>
 
       {/* Transcript Feed - all participants */}
-      <section className="p-4 border-t border-amber-200/60 bg-white/60">
-        <h2 className="text-lg font-semibold text-amber-900 mb-3">
+      <section className="p-4 border-t border-border bg-white/60">
+        <h2 className="text-lg font-semibold text-heading mb-3">
           Transcript Feed
         </h2>
-        <div className="max-h-32 overflow-y-auto space-y-1 text-sm text-amber-800">
+        <div className="max-h-32 overflow-y-auto space-y-1 text-sm text-heading">
           {transcriptChunks.length === 0 && (
-            <p className="text-amber-600/80">No transcript chunks yet</p>
+            <p className="text-muted">No transcript chunks yet</p>
           )}
           {transcriptChunks.map((t) => {
             const p = t.payload as { text?: string; display_name?: string };
@@ -719,7 +719,7 @@ export default function SessionPanel({
             const text = p.text ?? '(no text)';
             return (
               <div key={t.id} className="py-1">
-                <span className="font-medium text-amber-900">{label}:</span>{' '}
+                <span className="font-medium text-heading">{label}:</span>{' '}
                 {text}
               </div>
             );
@@ -730,7 +730,7 @@ export default function SessionPanel({
       <div className="p-4">
         <Link
           href="/"
-          className="text-amber-700 hover:text-amber-900 font-medium"
+          className="text-muted hover:text-heading font-medium"
         >
           ← Back to home
         </Link>

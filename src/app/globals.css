@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
+/* ===== Shine Panel Design Tokens (2026 SaaS Blue-Forward) ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  /* Semantic color tokens */
+  --color-shine-surface: #f8fafc;
+  --color-shine-surface-elevated: #ffffff;
+  --color-shine-surface-subtle: #f1f5f9;
+  --color-shine-primary: #2563eb;
+  --color-shine-primary-hover: #1d4ed8;
+  --color-shine-primary-muted: #3b82f6;
+  --color-shine-heading: #0f172a;
+  --color-shine-muted: #64748b;
+  --color-shine-muted-light: #94a3b8;
+  --color-shine-border: #e2e8f0;
+  --color-shine-border-subtle: #f1f5f9;
+  --color-shine-accent-success: #0d9488;
+  --color-shine-accent-ongoing: #0891b2;
+  --color-shine-accent-built: #2563eb;
+  --color-shine-accent-destructive: #dc2626;
+  --color-shine-accent-destructive-hover: #b91c1c;
+  --color-shine-input-border: #cbd5e1;
+  --color-shine-input-focus: #2563eb;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--color-shine-surface);
+  --color-foreground: var(--color-shine-heading);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Custom semantic colors for Tailwind utilities */
+  --color-surface: var(--color-shine-surface);
+  --color-surface-elevated: var(--color-shine-surface-elevated);
+  --color-surface-subtle: var(--color-shine-surface-subtle);
+  --color-primary: var(--color-shine-primary);
+  --color-primary-hover: var(--color-shine-primary-hover);
+  --color-primary-muted: var(--color-shine-primary-muted);
+  --color-heading: var(--color-shine-heading);
+  --color-muted: var(--color-shine-muted);
+  --color-muted-light: var(--color-shine-muted-light);
+  --color-border: var(--color-shine-border);
+  --color-border-subtle: var(--color-shine-border-subtle);
+  --color-accent-success: var(--color-shine-accent-success);
+  --color-accent-ongoing: var(--color-shine-accent-ongoing);
+  --color-accent-built: var(--color-shine-accent-built);
+  --color-accent-destructive: var(--color-shine-accent-destructive);
+  --color-accent-destructive-hover: var(--color-shine-accent-destructive-hover);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-shine-surface);
+  color: var(--color-shine-heading);
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
