@@ -106,29 +106,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ nudges: getMockNudges(transcript) });
     }
 
-    const prompt = `You are a meeting equity assistant. STRICT RULES.
+    const prompt = `You are a meeting equity assistant. Analyze the transcript for interrupted ideas.
 
-CRITICAL - NEVER NUDGE when:
-- The transcript discusses ONE topic and people respond, agree, or reach a decision
-- There is back-and-forth (What do you think? I agree. Good point. Sounds good. Anyone have concerns? No. Great, we'll move ahead.)
-- The discussion reaches resolution or natural closure
+TASK: Detect when a speaker's idea was cut short before they could finish, especially when another person (or the same person) abruptly switches to a completely unrelated topic.
 
-EXAMPLE - MUST RETURN {"nudges":[]} (NEVER nudge for this or anything similar):
-"Let's talk about the Q3 marketing budget. I think we should prioritize it since we've been underfunding it and competitors are outspending us. What do you all think? I agree, and I'd add that we need to decide by Friday. Good point. So let's say we increase it by twenty percent and revisit in October. Sounds good. Anyone have concerns? No, I'm good. Great, we'll move ahead with that."
-→ Single topic, everyone contributed, agreed, resolved. Output: {"nudges":[]}
+DO NUDGE when you see:
+- A speaker is mid-sentence or mid-thought and the discussion abruptly jumps to an unrelated topic
+- Someone introduces an idea, then before they finish or get a response, someone else changes the subject entirely
+- A speaker's point is dropped without acknowledgment and the conversation moves to something unrelated
+- Sequential utterances that have no logical connection (e.g. beaches → Pokemon, project timeline → lunch plans)
 
-ONLY NUDGE when (rare):
-- Topic A (e.g. beaches) is introduced, then UNRELATED Topic B (e.g. Pokemon) appears with ZERO connection
-- Example: "Beaches are my favorite. They're so pretty. I really like Pokemon." → beaches cut short by Pokemon
-
-STEP 1: If the transcript shows one topic with Q&A, agreement, or resolution → return {"nudges":[]} immediately.
-STEP 2: Only if you see an abrupt jump from unrelated Topic A to unrelated Topic B, return 1 nudge.
-
-Default: {"nudges":[]}. When in doubt: {"nudges":[]}.
+DO NOT NUDGE when:
+- The transcript shows natural Q&A, agreement, or resolution on a single topic
+- People respond to each other's points, build on ideas, or reach a decision
+- The discussion flows logically between related sub-topics
 
 Return STRICT JSON only. Either {"nudges":[]} or {"nudges":[{...}]}. Every nudge MUST include "interrupted_idea".
 Transcript may use "Name: text" format for speaker attribution. Include "owner" with the speaker name when you can identify who introduced the interrupted idea.
-{"nudges":[{"type":"idea_revisit","title":"Possible interruption","owner":"string or omit","interrupted_idea":"string (REQUIRED: the idea that was not explored enough)","rationale":"string","suggested_phrase":"string","confidence":0.0-1.0}]}
+{"nudges":[{"type":"idea_revisit","title":"Possible interruption","owner":"string or omit","interrupted_idea":"string (REQUIRED: the idea that was not fully explored)","rationale":"string","suggested_phrase":"string","confidence":0.0-1.0}]}
 
 ---
 SEGMENT 1 (earlier in meeting):

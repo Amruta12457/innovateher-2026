@@ -37,7 +37,7 @@ const CHUNK_MS = 10_000;
 const NUDGE_INTERVAL_MS =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS
     ? parseInt(process.env.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS, 10) * 1000
-    : 5 * 60 * 1000) || 5 * 60 * 1000;
+    : 3 * 60 * 1000) || 3 * 60 * 1000;
 
 export default function SessionPanel({
   session,
