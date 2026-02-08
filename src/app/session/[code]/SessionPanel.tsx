@@ -16,6 +16,7 @@ type NudgePayload = {
   type?: string;
   title?: string;
   owner?: string;
+  interrupted_idea?: string;
   rationale?: string;
   suggested_phrase?: string;
   confidence?: number;
@@ -34,8 +35,7 @@ const CHUNK_MS = 10_000;
 const NUDGE_INTERVAL_MS =
   (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS
     ? parseInt(process.env.NEXT_PUBLIC_NUDGE_INTERVAL_SECONDS, 10) * 1000
-    : 60_000) || 60_000;
-const INTERRUPTION_SNOOZE_MS = 30_000;
+    : 10 * 60 * 1000) || 10 * 60 * 1000;
 
 export default function SessionPanel({
   session,
@@ -55,8 +55,6 @@ export default function SessionPanel({
   const [nudgeLoading, setNudgeLoading] = useState(false);
   const [endMeetingLoading, setEndMeetingLoading] = useState(false);
   const [interruptionDetectionEnabled, setInterruptionDetectionEnabled] = useState(true);
-  const [lastInterruption, setLastInterruption] = useState<{ id: string; at: number } | null>(null);
-  const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
   const router = useRouter();
 
   const streamRef = useRef<MediaStream | null>(null);
@@ -214,13 +212,16 @@ export default function SessionPanel({
         overlapDetectorRef.current = startOverlapDetection(stream, {
           onInterruption: async (confidence) => {
             try {
-              const ev = await insertEvent(session.id, 'interruption', {
+              const recent = transcriptRef.current.trim();
+              const sentences = recent.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean);
+              const lastTopic = sentences.length > 0
+                ? sentences[sentences.length - 1]
+                : recent.slice(-150).replace(/\s+/g, ' ').trim() || undefined;
+              await insertEvent(session.id, 'interruption', {
                 timestamp: new Date().toISOString(),
                 confidence,
-                rationale:
-                  'Audio energy overlap detected; one speaker may have stopped shortly after overlap began.',
+                interrupted_idea: lastTopic,
               });
-              setLastInterruption({ id: ev.id, at: Date.now() });
             } catch (err) {
               console.warn('[overlap] Failed to insert interruption event:', err);
             }
@@ -292,9 +293,9 @@ export default function SessionPanel({
     try {
       await insertEvent(session.id, 'nudge', {
         type: 'idea_revisit',
-        title: 'Amplify this idea',
-        owner: name,
-        rationale: 'Strong point worth highlighting',
+        title: 'Possible Interruption',
+        interrupted_idea: 'Their point about the project timeline',
+        rationale: 'Abrupt topic change',
         suggested_phrase: "Let's revisit that thought",
         confidence: 0.9,
       });
@@ -307,13 +308,16 @@ export default function SessionPanel({
     if (nudgeLoading) return;
     setNudgeLoading(true);
     try {
-      const transcript = transcriptRef.current;
+      const chunks = transcriptChunks
+        .map((t) => (t.payload as { text?: string }).text ?? '')
+        .filter(Boolean);
       const res = await fetch('/api/nudge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          transcriptSoFar: transcript,
+          transcriptSoFar: transcriptRef.current,
+          transcriptChunks: chunks,
           windowMinutes: 10,
         }),
       });
@@ -324,6 +328,7 @@ export default function SessionPanel({
           type: n.type ?? 'idea_revisit',
           title: n.title,
           owner: n.owner,
+          interrupted_idea: n.interrupted_idea,
           rationale: n.rationale,
           suggested_phrase: n.suggested_phrase,
           confidence: n.confidence,
@@ -334,7 +339,7 @@ export default function SessionPanel({
     } finally {
       setNudgeLoading(false);
     }
-  }, [session.id, nudgeLoading]);
+  }, [session.id, nudgeLoading, transcriptChunks]);
 
   const endMeeting = useCallback(async () => {
     if (endMeetingLoading) return;
@@ -379,13 +384,6 @@ export default function SessionPanel({
     const t = setInterval(generateNudge, NUDGE_INTERVAL_MS);
     return () => clearInterval(t);
   }, [listening, role, generateNudge]);
-
-  const dismissInterruption = () => setLastInterruption(null);
-  const snoozeInterruption = () => {
-    setSnoozedUntil(Date.now() + INTERRUPTION_SNOOZE_MS);
-    setLastInterruption(null);
-  };
-  const showInterruptionCard = !!lastInterruption && Date.now() > snoozedUntil;
 
   const clearLocalView = () => {
     setEvents([]);
@@ -453,34 +451,6 @@ export default function SessionPanel({
       {role === 'host' && transcribeWarning && (
         <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-sm">
           {transcribeWarning}
-        </div>
-      )}
-
-      {/* Interruption card (host-only) */}
-      {role === 'host' && showInterruptionCard && (
-        <div className="mx-4 mt-2 p-3 rounded-lg bg-rose-50 border border-rose-200 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="font-medium text-rose-900 text-sm">Possible interruption detected</p>
-            <p className="text-rose-700 text-xs mt-1 italic">Suggested phrases:</p>
-            <ul className="text-rose-800 text-sm space-y-0.5">
-              <li>&ldquo;Sorry, go ahead.&rdquo;</li>
-              <li>&ldquo;I think someone was finishing a thought.&rdquo;</li>
-            </ul>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={snoozeInterruption}
-              className="px-2 py-1 rounded bg-rose-200 hover:bg-rose-300 text-rose-900 text-xs font-medium"
-            >
-              Snooze
-            </button>
-            <button
-              onClick={dismissInterruption}
-              className="px-2 py-1 rounded bg-rose-300 hover:bg-rose-400 text-rose-900 text-xs font-medium"
-            >
-              Dismiss
-            </button>
-          </div>
         </div>
       )}
 
@@ -565,30 +535,38 @@ export default function SessionPanel({
             Voices to Revisit
           </h2>
           <ul className="space-y-2">
-            {nudges.length === 0 && (
+            {nudges.length === 0 && interruptions.length === 0 && (
               <li className="text-amber-600/80 text-sm">No nudges yet</li>
             )}
-            {nudges.map((n) => {
-              const p = n.payload as NudgePayload;
-              return (
-                <li
-                  key={n.id}
-                  className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/40"
-                >
-                  <div className="font-medium text-amber-900">
-                    {p.title ?? 'Nudge'}
-                  </div>
-                  {p.owner && (
-                    <div className="text-xs text-amber-700">— {p.owner}</div>
-                  )}
-                  {p.suggested_phrase && (
-                    <div className="text-sm text-amber-800 mt-1 italic">
-                      &ldquo;{p.suggested_phrase}&rdquo;
+            {[...nudges, ...interruptions]
+              .sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              )
+              .map((e) => {
+                const topic =
+                  e.type === 'nudge'
+                    ? (e.payload as NudgePayload).interrupted_idea ??
+                      (e.payload as NudgePayload).rationale
+                    : (e.payload as { interrupted_idea?: string; rationale?: string }).interrupted_idea ??
+                      (e.payload as { rationale?: string }).rationale;
+                return (
+                  <li
+                    key={e.id}
+                    className="p-2 rounded-lg bg-amber-50/80 border border-amber-200/40"
+                  >
+                    <div className="font-medium text-amber-900">
+                      Possible Interruption
                     </div>
-                  )}
-                </li>
-              );
-            })}
+                    {topic && (
+                      <div className="text-sm text-amber-800 mt-1">
+                        <span className="font-medium">Topic that was interrupted: </span>
+                        {topic}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
           </ul>
         </section>
 
