@@ -2,7 +2,7 @@
 
 A shared-session meeting companion for the InnovateHer 2026 hackathon. One person is the Host/Listener who captures audio and generates live nudges; others join as Viewers to see the same idea board. After the meeting, a Shine Reflection Report highlights participation and recognition.
 
-Devpost: https://devpost.com/software/shine-ghr5ai?_gl=1*mq7t9w*_gcl_au*MTMzMzI1Mzk4NS4xNzY5NTUyMzA3*_ga*MjE0MjI0MTg0NC4xNzY5NTUyMzA3*_ga_0YHJK3Y10M*czE3NzA3NzkxNzUkbzckZzEkdDE3NzA3ODAyOTkkajQ5JGwwJGgw
+Feel free to checkout [this project!](https://devpost.com/software/shine-ghr5ai?_gl=1*1437ytt*_gcl_au*MTMzMzI1Mzk4NS4xNzY5NTUyMzA3*_ga*MjE0MjI0MTg0NC4xNzY5NTUyMzA3*_ga_0YHJK3Y10M*czE3NzA3NzkxNzUkbzckZzEkdDE3NzA3ODA0MzEkajMxJGwwJGgw) 
 
 ## Tech Stack
 
